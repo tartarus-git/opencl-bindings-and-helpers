@@ -609,7 +609,7 @@ cl_int initOpenCLBindings();
 // Frees the OpenCL library from the current process.
 cl_int freeOpenCLLib();
 
-// Finds the most optimal device in the available list of devices on the system based on a set of constraints.
+// Finds the most optimal device in the available list of devices on the system and initializes basic OpenCL variables based on that device.
 cl_int initOpenCLVarsForBestDevice(const char* targetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue);
 
 // Reads all the text from a file and returns a pointer to the text in memory. Memory needs to be deleted using delete or delete[] (preferrably the latter because it's more proper IN THIS CASE).
