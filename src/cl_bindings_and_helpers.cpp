@@ -1,4 +1,4 @@
-#include "OpenCLBindingsAndHelpers.h"
+#include "cl_bindings_and_helpers.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
