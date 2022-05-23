@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>                                                                                  // Used for fixed-width types.
-#include <string>																					// Used for returning build log with std::string.
+#include <string>																					// Used for access to std::string.
 
 // NOTE: These almost definitely only work in Windows, so if you ever want to port this to another system, these definitely need to change.
 #define CL_API_CALL _stdcall                                                                        // Calling covention for the OpenCL API calls.
@@ -18,6 +18,8 @@
 // NOTE: So that you know which features will be available and which won't inside the actual DLL that you're going to be linking with based on the version info that
 // NOTE: it gives you, I'm going to comment which features were introduced in which version. Uncommented features have been there since the beginning and are super
 // NOTE: safe to use.
+
+#define CL_EXT_VERSION_STRING_PREFIX_LENGTH 10			// TODO: Put in actual number.
 
 // NOTE: Floats in OpenCL are always 32-bit as far as I can tell by looking at the docs, so don't worry about other sizes.
 #define CL_EXT_FLOAT_SIZE 4
@@ -101,14 +103,17 @@
 // end introduction
 
 // Custom OpenCL error code extentions for helper code return values. These extentions take up the positive space of the int32, since no other error codes (even other extentions) take up that space.
-#define CL_EXT_INIT_FAILURE							  1
-#define CL_EXT_FREE_FAILURE							  2
-#define CL_EXT_NO_PLATFORMS_FOUND					  3
-#define CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM			  4
-#define CL_EXT_NO_DEVICES_FOUND						  5
+#define CL_EXT_INIT_FAILURE								1
+#define CL_EXT_FREE_FAILURE								2
+#define CL_EXT_NO_PLATFORMS_FOUND						3
+#define CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM				4
+#define CL_EXT_NO_DEVICES_FOUND							5
 
-#define CL_EXT_FAILED_TO_READ_SOURCE_FILE			  4
-#define CL_EXT_BUILD_FAILED_WITH_BUILD_LOG			  5
+#define CL_EXT_FILE_OPEN_FAILED							6
+
+#define CL_EXT_BUILD_FAILED_WITH_BUILD_LOG				7
+
+#define CL_EXT_INSUFFICIENT_HOST_MEM					8
 
 /* cl_platform_info */
 #define CL_PLATFORM_PROFILE                         0x0900
@@ -450,7 +455,7 @@ inline clCreateCommandQueue_func clCreateCommandQueue;
 
 typedef cl_program (CL_API_CALL* clCreateProgramWithSource_func)(cl_context context, 
 																 cl_uint count, 
-																 const char** strings, 
+																 const char* const* strings, 
 																 const size_t* lengths, 
 																 cl_int* errcode_ret);
 // Creates an OpenCL program with the specified source.
@@ -603,17 +608,70 @@ typedef cl_int (CL_API_CALL* clReleaseContext_func)(cl_context context);
 // Decrements a context's reference count.
 inline clReleaseContext_func clReleaseContext;
 
+// Stores version information in numerical form.
+struct VersionIdentifier {
+	uint16_t major;
+	uint16_t minor;
+
+	VersionIdentifier(uint16_t major, uint16_t minor);
+
+	bool operator>=(const VersionIdentifier& rightSide);
+};
+
+// Bind a specific DLL function to it's corresponding function pointer. Splitting these up into separate functions is useful in case the user wants to bind these in a lazy fashion.
+bool bind_clGetPlatformIDs();
+bool bind_clGetPlatformInfo();
+bool bind_clGetDeviceIDs();
+bool bind_clGetDeviceInfo();
+bool bind_clCreateContext();
+bool bind_clCreateCommandQueue();
+bool bind_clCreateProgramWithSource();
+bool bind_clBuildProgram();
+bool bind_clGetProgramBuildInfo();
+bool bind_clCreateKernel();
+bool bind_clCreateBuffer();
+bool bind_clCreateImage2D();
+bool bind_clSetKernelArg();
+bool bind_clGetKernelWorkGroupInfo();
+bool bind_clEnqueueNDRangeKernel();
+bool bind_clFinish();
+bool bind_clEnqueueWriteBuffer();
+bool bind_clEnqueueReadBuffer();
+bool bind_clEnqueueWriteImage();
+bool bind_clEnqueueReadImage();
+bool bind_clReleaseMemObject();
+bool bind_clReleaseKernel();
+bool bind_clReleaseProgram();
+bool bind_clReleaseCommandQueue();
+bool bind_clReleaseContext();
+
+bool loadOpenCLLib();
+
 // Simple helper function which initializes the dynamic linkage to the OpenCL DLL and initializes the bindings to all of the various functions.
 cl_int initOpenCLBindings();
 
-// Frees the OpenCL library from the current process.
-cl_int freeOpenCLLib();
+bool freeOpenCLLib();
+
+VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* string);
 
 // Finds the most optimal device in the available list of devices on the system and initializes basic OpenCL variables based on that device.
+// NOTE: In case you want to only bind the functions that this function uses, it uses:
+// clGetPlatformIDs
+// clGetPlatformInfo
+// clGetDeviceIDs
+// clGetDeviceInfo
+// clCreateContext
+// clCreateCommandQueue
+// clReleaseContext
 cl_int initOpenCLVarsForBestDevice(const char* targetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue);
 
-// Reads all the text from a file and returns a pointer to the text in memory. Memory needs to be deleted using delete or delete[] (preferrably the latter because it's more proper IN THIS CASE).
-char* readAllFromSourceFile(const char* sourceFile);
-
 // Helper function to quickly set up a compute kernel.
+// NOTE: In case you want to only bind the functions that this function uses, it uses:
+// clCreateProgramWithSource
+// clBuildProgram
+// clGetProgramBuildInfo
+// clReleaseProgram
+// clCreateKernel
+// clGetKernelWorkGroupInfo
+// clReleaseKernel
 cl_int setupComputeKernel(cl_context context, cl_device_id device, const char* sourceFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog);
