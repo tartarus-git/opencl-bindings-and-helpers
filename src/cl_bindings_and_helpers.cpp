@@ -15,7 +15,10 @@ VersionIdentifier::VersionIdentifier(uint16_t major, uint16_t minor) : major(maj
 
 bool VersionIdentifier::operator>=(const VersionIdentifier& rightSide) {
 	if (major > rightSide.major) { return true; }
+	if (major < rightSide.major) { return false; }
 	if (minor > rightSide.minor) { return true; }
+	if (minor < rightSide.minor) { return false; }
+	return true;
 }
 
 HMODULE DLLHandle;
@@ -48,16 +51,16 @@ bool bind_clReleaseProgram() { return clReleaseProgram = (clReleaseProgram_func)
 bool bind_clReleaseCommandQueue() { return clReleaseCommandQueue = (clReleaseCommandQueue_func)GetProcAddress(DLLHandle, "clReleaseCommandQueue"); }
 bool bind_clReleaseContext() { return clReleaseContext = (clReleaseContext_func)GetProcAddress(DLLHandle, "clReleaseContext"); }
 
-#define CHECK_FUNC_VALIDITY(func) if (!(func)) { FreeLibrary(DLLHandle); return CL_EXT_INIT_FAILURE; }
+#define CHECK_FUNC_VALIDITY(func) if (!(func)) { FreeLibrary(DLLHandle); return CL_EXT_DLL_FUNC_BIND_FAILURE; }
 
 cl_int initOpenCLBindings() {
-	if (!LoadOpenCLLib) { return CL_EXT_INIT_FAILURE; }
+	if (!loadOpenCLLib()) { return CL_EXT_DLL_LOAD_FAILURE; }
 
 	CHECK_FUNC_VALIDITY(bind_clGetPlatformIDs());										// Go through all the functions and bind them one by one.
 	CHECK_FUNC_VALIDITY(bind_clGetPlatformInfo());										// As soon as a bind fails, try to free the library and subsequently return failure for the whole init function.
 	CHECK_FUNC_VALIDITY(bind_clGetDeviceIDs());
 	CHECK_FUNC_VALIDITY(bind_clGetDeviceInfo());
-	CHECK_FUNC_VALIDITY(clCreateContext());
+	CHECK_FUNC_VALIDITY(bind_clCreateContext());
 	CHECK_FUNC_VALIDITY(bind_clCreateCommandQueue());
 	CHECK_FUNC_VALIDITY(bind_clCreateProgramWithSource());
 	CHECK_FUNC_VALIDITY(bind_clBuildProgram());
@@ -133,7 +136,7 @@ cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatfor
 			delete[] versionString;
 
 			cl_uint deviceCount;
-			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_GPU, 0, nullptr, &deviceCount);
+			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_GPU, 0, nullptr, &deviceCount);				// TODO: Change this algorithm to work with any device that isn't the CPU, so also signal processors or whatever other accel thing you have connected to your computer.
 			if (err != CL_SUCCESS) { delete[] platforms; return err; }
 			if (!deviceCount) { delete[] platforms; return CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM; }
 
@@ -194,40 +197,58 @@ char* readFromSourceFile(const char* sourceFile, cl_int& errorCode) {
 	return kernelSource;																																	// Returning a raw heap-initialized char array is potentially dangerous. The caller must delete the array.
 }
 
-cl_int setupComputeKernel(cl_context context, cl_device_id device, const char* sourceFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog) {
+cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, const char* sourceCodeString, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog) {
 	cl_int err;
-	const char* kernelSource = readFromSourceFile(sourceFile, err);
-	if (!kernelSource) { return err; }
-	program = clCreateProgramWithSource(context, 1, (const char* const*)&kernelSource, nullptr, &err);
-	delete[] kernelSource;
-	if (!program) { return err; }
+	program = clCreateProgramWithSource(context, 1, (const char* const*)&sourceCodeString, nullptr, &err);
+	delete[] sourceCodeString;
+	if (!program) { return CL_EXT_CREATE_PROGRAM_FAILED; }
 
-	err = clBuildProgram(program, 0, nullptr, nullptr, nullptr, nullptr);
-	if (err != CL_SUCCESS) {																																// If build fails, try to return the build log to the user.
-		size_t buildLogSize;
-		err = clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &buildLogSize);
-		if (err != CL_SUCCESS) { clReleaseProgram(program); return err; }
-		char* buildLogBuffer = new (std::nothrow) char[buildLogSize];
-		if (!buildLogBuffer) { clReleaseProgram(program); return CL_EXT_INSUFFICIENT_HOST_MEM; }
-		err = clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, buildLogSize, buildLogBuffer, nullptr);
-		if (err != CL_SUCCESS) {
-			delete[] buildLogBuffer;
+	switch (clBuildProgram(program, 0, nullptr, nullptr, nullptr, nullptr)) {
+	case CL_SUCCESS: break;
+	case CL_BUILD_PROGRAM_FAILURE:
+		{
+			size_t buildLogSize;
+
+			// IMPORTANT-SIDE-NOTE: The above initialization of buildLogSize is actually legal even without the extra scope with the { } symbols.
+			// What isn't legal is size_t buildLogSize = something. Considering the goto-nature of the switch statement and the stacks involved, both shouldn't be allowed,
+			// or so I thought. The language designers thought differently. Basically, when gotoing somewhere, the compiler makes sure whatever variables were declared
+			// in the code you missed are pushed onto the stack. Why people thought to do it like this instead of just forcing you to explicitly put in a scope somewhere
+			// to explicitly limit the variable's lifetime is beyond me at the moment.
+			// Obviously, since the in between code wasn't executed, the values of the "extra" variables that were pushed are just uninitialized, so you probably shouldn't
+			// read from them in the after-the-goto code, but you can write to them and use them, which surprised me, but makes sense given the behaviour that I just
+			// talked about.
+			// ANYWAY: The reason one works and the other doesn't even though they are the same thing is because the compiler can't assign any values to the variable
+			// if you skip it, since the code execution is skipped. In order to make that explicit, the language forces you to do a bare minimum declaration as a way to
+			// describe what is happening under the hood in greater detail. Probably to minimize bugs and stuff. I might be wrong about some of this, but this makes
+			// the most sense to me.
+
+			err = clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &buildLogSize);
+			if (err != CL_SUCCESS) { clReleaseProgram(program); return err; }
+			char* buildLogBuffer = new (std::nothrow) char[buildLogSize];
+			if (!buildLogBuffer) { clReleaseProgram(program); return CL_EXT_INSUFFICIENT_HOST_MEM; }
+			err = clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, buildLogSize, buildLogBuffer, nullptr);
+			if (err != CL_SUCCESS) {
+				delete[] buildLogBuffer;
+				clReleaseProgram(program);
+				return CL_EXT_GET_BUILD_LOG_FAILED;
+			}
 			clReleaseProgram(program);
-			return err;
+			buildLog = std::string(buildLogBuffer, buildLogSize - 1);																							// Give back to user as an std::string to avoid headaches with dangling pointers. WE DON'T DELETE buildLogBuffer here because it's now under the care of buildLog std::string.
+			return CL_EXT_BUILD_FAILED_WITH_BUILD_LOG;
 		}
+	default:
 		clReleaseProgram(program);
-		buildLog = std::string(buildLogBuffer, buildLogSize - 1);																							// Give back to user as an std::string to avoid headaches with dangling pointers. WE DON'T DELETE buildLogBuffer here because it's now under the care of buildLog std::string.
-		return CL_EXT_BUILD_FAILED_WITH_BUILD_LOG;
+		return CL_EXT_BUILD_FAILED_WITHOUT_BUILD_LOG;
 	}
 
 	kernel = clCreateKernel(program, kernelName, &err);
-	if (!kernel) { clReleaseProgram(program); return err; }
+	if (!kernel) { clReleaseProgram(program); return CL_EXT_CREATE_KERNEL_FAILED; }
 
 	err = clGetKernelWorkGroupInfo(kernel, device, CL_KERNEL_WORK_GROUP_SIZE, sizeof(size_t), &kernelWorkGroupSize, nullptr);
 	if (err != CL_SUCCESS) {
 		clReleaseKernel(kernel);
 		clReleaseProgram(program);
-		return err;
+		return CL_EXT_GET_KERNEL_WORK_GROUP_INFO_FAILED;
 	}
 
 	size_t kernelPreferredWorkGroupSizeMultiple;																										// The kernels preferred work group size multiple, which should go evenly into whatever size we end up picking for the kernel work group.
@@ -235,11 +256,18 @@ cl_int setupComputeKernel(cl_context context, cl_device_id device, const char* s
 	if (err != CL_SUCCESS) {
 		clReleaseKernel(kernel);
 		clReleaseProgram(program);
-		return err;
+		return CL_EXT_GET_KERNEL_WORK_GROUP_INFO_FAILED;
 	}
 
 	// Compute optimal work group size for kernel based on the raw kernel maximum and kernel preferred work group size multiple.
 	if (kernelWorkGroupSize > kernelPreferredWorkGroupSizeMultiple) { kernelWorkGroupSize -= kernelWorkGroupSize % kernelPreferredWorkGroupSizeMultiple; }
 
 	return CL_SUCCESS;
+}
+
+cl_int setupComputeKernelFromFile(cl_context context, cl_device_id device, const char* sourceCodeFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog) {
+	cl_int err;
+	const char* sourceCodeString = readFromSourceFile(sourceCodeFile, err);
+	if (!sourceCodeString) { return err; }
+	return setupComputeKernelFromString(context, device, sourceCodeString, kernelName, program, kernel, kernelWorkGroupSize, buildLog);
 }

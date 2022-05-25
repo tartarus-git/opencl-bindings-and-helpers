@@ -103,17 +103,22 @@
 // end introduction
 
 // Custom OpenCL error code extentions for helper code return values. These extentions take up the positive space of the int32, since no other error codes (even other extentions) take up that space.
-#define CL_EXT_INIT_FAILURE								1
-#define CL_EXT_FREE_FAILURE								2
-#define CL_EXT_NO_PLATFORMS_FOUND						3
-#define CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM				4
-#define CL_EXT_NO_DEVICES_FOUND							5
+#define CL_EXT_DLL_LOAD_FAILURE							1
+#define CL_EXT_DLL_FUNC_BIND_FAILURE					2
+//#define CL_EXT_DLL_FREE_FAILURE							3
+#define CL_EXT_NO_PLATFORMS_FOUND						4
+#define CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM				5
+#define CL_EXT_NO_DEVICES_FOUND							6
 
-#define CL_EXT_FILE_OPEN_FAILED							6
+#define CL_EXT_FILE_OPEN_FAILED							7
 
-#define CL_EXT_BUILD_FAILED_WITH_BUILD_LOG				7
-
-#define CL_EXT_INSUFFICIENT_HOST_MEM					8
+#define CL_EXT_CREATE_PROGRAM_FAILED					8
+#define CL_EXT_INSUFFICIENT_HOST_MEM					9
+#define CL_EXT_GET_BUILD_LOG_FAILED						10
+#define CL_EXT_BUILD_FAILED_WITH_BUILD_LOG				11
+#define CL_EXT_BUILD_FAILED_WITHOUT_BUILD_LOG			12
+#define CL_EXT_CREATE_KERNEL_FAILED						13
+#define CL_EXT_GET_KERNEL_WORK_GROUP_INFO_FAILED		14
 
 /* cl_platform_info */
 #define CL_PLATFORM_PROFILE                         0x0900
@@ -663,7 +668,7 @@ VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* stri
 // clCreateContext
 // clCreateCommandQueue
 // clReleaseContext
-cl_int initOpenCLVarsForBestDevice(const char* targetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue);
+cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& targetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue);
 
 // Helper function to quickly set up a compute kernel.
 // NOTE: In case you want to only bind the functions that this function uses, it uses:
@@ -674,4 +679,6 @@ cl_int initOpenCLVarsForBestDevice(const char* targetPlatformVersion, cl_platfor
 // clCreateKernel
 // clGetKernelWorkGroupInfo
 // clReleaseKernel
-cl_int setupComputeKernel(cl_context context, cl_device_id device, const char* sourceFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog);
+// TODO: Annotate these two functions properly.
+cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, const char* sourceCodeString, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog);
+cl_int setupComputeKernelFromFile(cl_context context, cl_device_id device, const char* sourceCodeFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog);
