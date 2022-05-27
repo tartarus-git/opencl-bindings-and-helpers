@@ -40,6 +40,7 @@ bool bind_clCreateImage2D() { return clCreateImage2D = (clCreateImage2D_func)Get
 bool bind_clSetKernelArg() { return clSetKernelArg = (clSetKernelArg_func)GetProcAddress(DLLHandle, "clSetKernelArg"); }
 bool bind_clGetKernelWorkGroupInfo() { return clGetKernelWorkGroupInfo = (clGetKernelWorkGroupInfo_func)GetProcAddress(DLLHandle, "clGetKernelWorkGroupInfo"); }
 bool bind_clEnqueueNDRangeKernel() { return clEnqueueNDRangeKernel = (clEnqueueNDRangeKernel_func)GetProcAddress(DLLHandle, "clEnqueueNDRangeKernel"); }
+bool bind_clFlush() { return clFlush = (clFlush_func)GetProcAddress(DLLHandle, "clFlush"); }
 bool bind_clFinish() { return clFinish = (clFinish_func)GetProcAddress(DLLHandle, "clFinish"); }
 bool bind_clEnqueueWriteBuffer() { return clEnqueueWriteBuffer = (clEnqueueWriteBuffer_func)GetProcAddress(DLLHandle, "clEnqueueWriteBuffer"); }
 bool bind_clEnqueueReadBuffer() { return clEnqueueReadBuffer = (clEnqueueReadBuffer_func)GetProcAddress(DLLHandle, "clEnqueueReadBuffer"); }
@@ -71,6 +72,7 @@ cl_int initOpenCLBindings() {
 	CHECK_FUNC_VALIDITY(bind_clSetKernelArg());
 	CHECK_FUNC_VALIDITY(bind_clGetKernelWorkGroupInfo());
 	CHECK_FUNC_VALIDITY(bind_clEnqueueNDRangeKernel());
+	CHECK_FUNC_VALIDITY(bind_clFlush());
 	CHECK_FUNC_VALIDITY(bind_clFinish());
 	CHECK_FUNC_VALIDITY(bind_clEnqueueWriteBuffer());
 	CHECK_FUNC_VALIDITY(bind_clEnqueueReadBuffer());

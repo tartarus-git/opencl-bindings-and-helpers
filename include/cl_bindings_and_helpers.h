@@ -537,8 +537,12 @@ typedef cl_int (CL_API_CALL* clEnqueueNDRangeKernel_func)(cl_command_queue comma
 // Enqueues a kernel on the command queue. There is no way to make this synchronous, you just have to use clFinish afterwards if you want to wait until it finishes.
 inline clEnqueueNDRangeKernel_func clEnqueueNDRangeKernel;
 
+typedef cl_int (CL_API_CALL* clFlush_func)(cl_command_queue command_queue);
+// Flushes the command queue. That is to say it dispatches all the queued tasks.
+inline clFlush_func clFlush;
+
 typedef cl_int (CL_API_CALL* clFinish_func)(cl_command_queue command_queue);
-// Waits for every entry in the command queue to finish. You can use this to synchronize OpenCL tasks with your own tasks.
+// Waits for every entry in the command queue to finish (implicitly flushes before waiting). You can use this to synchronize OpenCL tasks with your own tasks.
 inline clFinish_func clFinish;
 
 typedef cl_int (CL_API_CALL* clEnqueueWriteBuffer_func)(cl_command_queue command_queue, 
