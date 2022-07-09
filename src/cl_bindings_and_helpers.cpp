@@ -5,7 +5,7 @@
 
 #include <cstdint>						// For fixed-width types.
 
-#include <new>							// For std::nothrow.
+#include <new>							// For std::nothrow.	//TODO: And maybe the actual new overload that I'm using?
 
 #include <fstream>						// For reading OpenCL source code from file.
 
@@ -106,7 +106,7 @@ uint16_t convertStringToUInt16(const char* string) {
 VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* string) {
 	for (int i = CL_EXT_VERSION_STRING_PREFIX_LENGTH; ; i++) {
 		if (string[i] == '.') { return VersionIdentifier(convertStringToUInt16(string + CL_EXT_VERSION_STRING_PREFIX_LENGTH, i - CL_EXT_VERSION_STRING_PREFIX_LENGTH), convertStringToUInt16(string + i + 1)); }
-		if (string[i] == '\0') { return VersionIdentifier(-1, -1); }
+		if (string[i] == '\0') { return VersionIdentifier(-1, -1); }			// This shouldn't happen given the requirements above, but I feel better knowing it's here.
 	}
 }
 

@@ -627,6 +627,64 @@ struct VersionIdentifier {
 	bool operator>=(const VersionIdentifier& rightSide);
 };
 
+class OpenCLDeviceCollection {
+public:
+	cl_context* contexts;
+	size_t* contextEndIndices;
+	size_t contexts_length;
+	cl_device_id* devices;
+	cl_device_type* deviceTypes;
+	size_t devices_length;
+
+	constexpr OpenCLDeviceCollection(cl_int err, size_t contexts_length, size_t devices_length) noexcept : devices_length(devices_length), contexts_length(contexts_length) {
+		devices = new (std::nothrow) cl_device_id[devices_length];
+		if (!devices) { err = 0; return; }			// TODO: Make this actually return the right error codes.
+		deviceTypes = new (std::nothrow) cl_device_type[devices_length];
+		if (!deviceTypes) { delete[] devices; err = 0; return; }
+		contexts = new (std::nothrow) cl_context[contexts_length];
+		if (!contexts) { delete[] deviceTypes; delete[] devices; err = 0; return; }
+		contextEndIndices = new (std::nothrow) size_t[contexts_length];
+		if (!contextEndIndices) { delete[] contexts; delete[] deviceTypes; delete[] devices; err = 0; return; }
+	}
+
+	constexpr cl_device_id& operator[](size_t index) noexcept { return devices[index]; }
+
+	constexpr cl_context& getContextForDeviceIndex(size_t deviceIndex) noexcept {			// TODO: Go over this binary search again and maek sure it is the most optimal it can be.
+		size_t startIndex = 0;
+		size_t endIndex = contexts_length;
+		while (true) {
+			size_t middle = endIndex / 2;
+			if (deviceIndex < contextEndIndices[middle]) {
+				if (middle == 0) { return contexts[0]; }
+				if (deviceIndex >= contextEndIndices[middle - 1]) { return contexts[middle]; }
+				endIndex = contextEndIndices[middle];
+				continue;
+			}
+			if (deviceIndex > contextEndIndices[middle]) {
+				if (deviceIndex >= contextEndIndices[middle - 1]) { return contexts[middle]; }
+				startIndex = contextEndIndices[middle];
+				continue;
+			}
+			return contexts[middle + 1];
+		}
+	}
+
+	constexpr OpenCLDeviceCollection getDevicesWithSpecificType(cl_device_type deviceType) noexcept {
+
+	}
+
+	constexpr OpenCLDeviceCollection getDevicesWithTypeOtherThan(cl_device_type deviceType) noexcept {
+		// TODO: implement this.
+	}
+
+	constexpr ~OpenCLDeviceCollection() noexcept {
+		delete[] contextEndIndices;
+		delete[] contexts;
+		delete[] deviceTypes;
+		delete[] devices;
+	}
+};
+
 // Bind a specific DLL function to it's corresponding function pointer. Splitting these up into separate functions is useful in case the user wants to bind these in a lazy fashion.
 bool bind_clGetPlatformIDs();
 bool bind_clGetPlatformInfo();
@@ -663,6 +721,10 @@ bool freeOpenCLLib();
 
 VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* string);
 
+// TODO: Consider putting all this opencl stuff in a namespace to avoid collisions and messiness.
+
+cl_int getAllOpenCLDevices(const VersionIdentifier& minimumPlatformVersion, DeviceCollection& devices);
+
 // Finds the most optimal device in the available list of devices on the system and initializes basic OpenCL variables based on that device.
 // NOTE: In case you want to only bind the functions that this function uses, it uses:
 // clGetPlatformIDs
@@ -672,7 +734,8 @@ VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* stri
 // clCreateContext
 // clCreateCommandQueue
 // clReleaseContext
-cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& targetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue);
+// TODO: Update the name of minPlatVers in the implementation as well.
+cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue);
 
 // Helper function to quickly set up a compute kernel.
 // NOTE: In case you want to only bind the functions that this function uses, it uses:
