@@ -637,7 +637,7 @@ public:
 
 	constexpr OpenCLDeviceCollection() noexcept : devices_length(0), contexts_length(0) { }
 
-	constexpr OpenCLDeviceCollection(cl_int err, size_t contexts_length, size_t devices_length) noexcept : devices_length(devices_length), contexts_length(contexts_length) {
+	constexpr OpenCLDeviceCollection(cl_int& err, size_t contexts_length, size_t devices_length) noexcept : devices_length(devices_length), contexts_length(contexts_length) {
 		devices = new (std::nothrow) cl_device_id[devices_length];
 		if (!devices) { err = 0; return; }			// TODO: Make this actually return the right error codes.
 		contexts = new (std::nothrow) cl_context[contexts_length];
@@ -689,24 +689,28 @@ public:
 
 	constexpr cl_device_id& operator[](size_t index) noexcept { return devices[index]; }
 
-	constexpr cl_context& getContextForDeviceIndex(size_t deviceIndex) noexcept {			// TODO: Go over this binary search again and maek sure it is the most optimal it can be.
+	constexpr cl_uint getContextIndexForDeviceIndex(size_t deviceIndex) noexcept {			// TODO: Go over this binary search again and maek sure it is the most optimal it can be.
 		size_t startIndex = 0;
 		size_t endIndex = contexts_length;
 		while (true) {
 			size_t middle = endIndex / 2;
 			if (deviceIndex < contextEndIndices[middle]) {
-				if (middle == 0) { return contexts[0]; }
-				if (deviceIndex >= contextEndIndices[middle - 1]) { return contexts[middle]; }
+				if (middle == 0) { return 0; }
+				if (deviceIndex >= contextEndIndices[middle - 1]) { return middle; }
 				endIndex = contextEndIndices[middle];
 				continue;
 			}
 			if (deviceIndex > contextEndIndices[middle]) {
-				if (deviceIndex >= contextEndIndices[middle - 1]) { return contexts[middle]; }
+				if (deviceIndex >= contextEndIndices[middle - 1]) { return middle; }
 				startIndex = contextEndIndices[middle];
 				continue;
 			}
-			return contexts[middle + 1];
+			return middle + 1;
 		}
+	}
+
+	constexpr cl_context& getContextForDeviceIndex(size_t deviceIndex) noexcept {
+		return contexts[getContextIndexForDeviceIndex(deviceIndex)];
 	}
 
 	constexpr ~OpenCLDeviceCollection() noexcept {
@@ -762,6 +766,8 @@ public:
 		length = other.length;
 		other.length = temp_length;
 	}
+
+	constexpr size_t& operator[](size_t index) noexcept { return indices[index]; }
 
 	constexpr OpenCLDeviceIndexCollection removeDevicesOfType(cl_device_type computeDeviceType) const noexcept {
 

@@ -116,45 +116,42 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 	cl_uint platformCount;
 	err = clGetPlatformIDs(0, nullptr, &platformCount);
 	if (err != CL_SUCCESS) { return OpenCLDeviceCollection(); }
-	if (!platformCount) { err = CL_EXT_NO_PLATFORMS_FOUND; return OpenCLDeviceCollection(); }
+	if (!platformCount) { return OpenCLDeviceCollection(); }
 
 	cl_platform_id* platforms = new (std::nothrow) cl_platform_id[platformCount];
-	if (!platforms) { err = CL_EXT_INSUFFICIENT_HOST_MEM; return OpenCLDeviceCollection(); }
-	err = clGetPlatformIDs(platformCount, platforms, nullptr);
-	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
-
-	cl_context* contexts = new (std::nothrow) cl_context[platformCount];
-	if (!contexts) { err = CL_EXT_INSUFFICIENT_HOST_MEM; delete[] platforms; return OpenCLDeviceCollection(); }
-	size_t* contextEndIndices = new (std::nothrow) size_t[platformCount];
-	if (!contextEndIndices) {
+	if (!platforms) {
 		err = CL_EXT_INSUFFICIENT_HOST_MEM;
-		delete[] contexts;
+		return OpenCLDeviceCollection();
+	}
+	err = clGetPlatformIDs(platformCount, platforms, nullptr);
+	if (err != CL_SUCCESS) {
 		delete[] platforms;
 		return OpenCLDeviceCollection();
 	}
 
-	std::vector<cl_device_id> devices;
+	std::vector<cl_uint> validPlatforms;
+	std::vector<cl_uint> validPlatformDeviceCounts;
+	size_t totalDeviceCount = 0;
 
 	for (size_t i = 0; i < platformCount; i++) {
 		const cl_platform_id& currentPlatform = platforms[i];										// NOTE: You might think you can just as well leave out the reference, but I think it is probably better with the reference since there are ways a copy can be avoided (stays in register the whole time for example) and we don't want to hinder that.
 																									// NOTE: Although on second thought, this technique doesn't really do anything in this case since the compiler can easily optimize it even if we just use a copy. 
 		size_t versionStringSize;
 		err = clGetPlatformInfo(currentPlatform, CL_PLATFORM_VERSION, 0, nullptr, &versionStringSize);
-		if (err != CL_SUCCESS) { delete[] contextEndIndices; delete[] contexts; delete[] platforms; return OpenCLDeviceCollection(); }
+		if (err != CL_SUCCESS) {
+			delete[] platforms;
+			return OpenCLDeviceCollection();
+		}
 
 		char* versionString = new (std::nothrow) char[versionStringSize];
 		if (!versionString) {
 			err = CL_EXT_INSUFFICIENT_HOST_MEM;
-			delete[] contextEndIndices;
-			delete[] contexts;
 			delete[] platforms;
 			return OpenCLDeviceCollection();
 		}
 		err = clGetPlatformInfo(currentPlatform, CL_PLATFORM_VERSION, versionStringSize, versionString, nullptr);
 		if (err != CL_SUCCESS) {
 			delete[] versionString;
-			delete[] contextEndIndices;
-			delete[] contexts;
 			delete[] platforms;
 			return OpenCLDeviceCollection();
 		}
@@ -162,54 +159,78 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 		if (convertOpenCLVersionStringToVersionIdentifier(versionString) >= minimumPlatformVersion) {
 			delete[] versionString;
 
+			validPlatforms.push_back(i);
+
 			cl_uint deviceCount;
 			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_ALL, 0, nullptr, &deviceCount);
-			if (err != CL_SUCCESS) {
-				delete[] contextEndIndices;
-				delete[] contexts;
-				delete[] platforms;
-				return OpenCLDeviceCollection();
-			}
-			if (!deviceCount) {
+			switch (err) {
+			case CL_SUCCESS: break;
+			case CL_DEVICE_NOT_FOUND:
 				err = CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM;
-				delete[] contextEndIndices;
-				delete[] contexts;
+				/*
+				* NOTE: Since we're using CL_DEVICE_TYPE_ALL, there is no excuse for the existence of
+				* a platform if we cannot see at least one device on it. We throw an error if it
+				* happens so that the user knows something is wrong with his system.
+				* (This shouldn't ever happen unless something is wrong with your system.)
+				*/
+			default:
+				delete[] platforms;
+				return OpenCLDeviceCollection();
+			}
+			if (deviceCount == 0) {
+				err = CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM;
 				delete[] platforms;
 				return OpenCLDeviceCollection();
 			}
 
-			size_t devices_before_length = devices.size();
-			cl_device_id* newDevices = devices.data() + devices_before_length;
-			size_t devices_new_length = devices_before_length + deviceCount; 
-			devices.resize(devices_new_length);
-			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_ALL, deviceCount, newDevices, nullptr);
-			if (err != CL_SUCCESS) {
-				delete[] contextEndIndices;
-				delete[] contexts;
-				delete[] platforms;
-				return OpenCLDeviceCollection();
-			}
-
-			contexts[i] = clCreateContext(nullptr, deviceCount, newDevices, nullptr, nullptr, &err);
-			if (err != CL_SUCCESS) {
-				delete[] contextEndIndices;
-				delete[] contexts;
-				delete[] platforms;
-				return OpenCLDeviceCollection();
-			}
-			contextEndIndices[i] = devices_new_length;
+			validPlatformDeviceCounts.push_back(deviceCount);
+			totalDeviceCount += deviceCount;
 
 			continue;
 		}
 		delete[] versionString;
 	}
-	// TODO: Rewrite so that you don't have to use vector, since it doesn't let you do what you want to do.
 
+	/*
+	* 
+	* NOTE: We go through everything, get the counts, then construct the OpenCLDeviceCollection, go through everything again
+	* and get the data. The reason we do this is because std::vector isn't able to lose control of it's data.
+	* We could create our own std::vector (would be easy in this case since we barely use any of the functionality) and add
+	* the functionality that we want, but this is easier. This solution is presumably minimally worse (can't definitively tell
+	* until you benchmark it though), but this function is only run once so it's totally not a problem.
+	* TODO: Maybe as a future improvement, consider doing it with a custom vector.
+	* 
+	*/
+
+	size_t validPlatformsCount = validPlatforms.size();
+
+	OpenCLDeviceCollection result(err, validPlatformsCount, totalDeviceCount);
+
+	size_t lastContextEndIndex = 0;
+	for (size_t i = 0; i < validPlatformsCount; i++) {
+		cl_device_id* devicesStart = result.devices + lastContextEndIndex;
+		err = clGetDeviceIDs(platforms[validPlatforms[i]], CL_DEVICE_TYPE_ALL, validPlatformDeviceCounts[i], devicesStart, nullptr);
+		if (err != CL_SUCCESS) {
+			delete[] platforms;
+			return OpenCLDeviceCollection();
+		}
+
+		result.contexts[i] = clCreateContext(nullptr, validPlatformDeviceCounts[i], devicesStart, nullptr, nullptr, &err);
+		if (err != CL_SUCCESS) {
+			delete[] platforms;
+			return OpenCLDeviceCollection();
+		}
+
+		lastContextEndIndex += validPlatformDeviceCounts[i];
+		result.contextEndIndices[i] = lastContextEndIndex;
+	}
+
+	return result;
 }
 
 // TODO: Think about just removing this function and somehow having the OpenCLDeviceCollection thing be sortable and filterable and just do it like that.
 cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) {
-	cl_uint platformCount;
+	/*cl_uint platformCount;
 	cl_int err = clGetPlatformIDs(0, nullptr, &platformCount);
 	if (err != CL_SUCCESS) { return err; }
 	if (!platformCount) { return CL_EXT_NO_PLATFORMS_FOUND; }
@@ -275,6 +296,25 @@ cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatfor
 		clReleaseContext(context);																															// Errors aren't handled here because it doesn't make a difference if it fails or not.
 		return err;
 	}
+
+	return CL_SUCCESS;*/
+
+
+
+
+	cl_int err;
+	OpenCLDeviceCollection devices = getAllOpenCLDevices(err, minimumTargetPlatformVersion);
+	if (err != CL_SUCCESS) { return err; }
+	OpenCLDeviceIndexCollection deviceIndices = devices.createDeviceIndexCollection(err);
+	if (err != CL_SUCCESS) { return err; }
+
+	OpenCLDeviceIndexCollection sortedDeviceIndices = deviceIndices.sortByWorkGroupSize();
+	bestDevice = devices[sortedDeviceIndices[sortedDeviceIndices.length - 1]];
+	context = devices.getContextForDeviceIndex(sortedDeviceIndices[sortedDeviceIndices.length - 1]);
+	commandQueue = clCreateCommandQueue(context, bestDevice, 0, &err);
+	if (err != CL_SUCCESS) { return err; }
+
+	// TODO: Get platform from context with opencl calls.
 
 	return CL_SUCCESS;
 }
