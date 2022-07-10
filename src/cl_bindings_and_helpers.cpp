@@ -7,6 +7,8 @@
 
 #include <new>							// For std::nothrow.	//TODO: And maybe the actual new overload that I'm using?
 
+#include <vector>
+
 #include <fstream>						// For reading OpenCL source code from file.
 
 #include <string>						// For std::string.
@@ -110,6 +112,102 @@ VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* stri
 	}
 }
 
+OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier& minimumPlatformVersion) {
+	cl_uint platformCount;
+	err = clGetPlatformIDs(0, nullptr, &platformCount);
+	if (err != CL_SUCCESS) { return OpenCLDeviceCollection(); }
+	if (!platformCount) { err = CL_EXT_NO_PLATFORMS_FOUND; return OpenCLDeviceCollection(); }
+
+	cl_platform_id* platforms = new (std::nothrow) cl_platform_id[platformCount];
+	if (!platforms) { err = CL_EXT_INSUFFICIENT_HOST_MEM; return OpenCLDeviceCollection(); }
+	err = clGetPlatformIDs(platformCount, platforms, nullptr);
+	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
+
+	cl_context* contexts = new (std::nothrow) cl_context[platformCount];
+	if (!contexts) { err = CL_EXT_INSUFFICIENT_HOST_MEM; delete[] platforms; return OpenCLDeviceCollection(); }
+	size_t* contextEndIndices = new (std::nothrow) size_t[platformCount];
+	if (!contextEndIndices) {
+		err = CL_EXT_INSUFFICIENT_HOST_MEM;
+		delete[] contexts;
+		delete[] platforms;
+		return OpenCLDeviceCollection();
+	}
+
+	std::vector<cl_device_id> devices;
+
+	for (size_t i = 0; i < platformCount; i++) {
+		const cl_platform_id& currentPlatform = platforms[i];										// NOTE: You might think you can just as well leave out the reference, but I think it is probably better with the reference since there are ways a copy can be avoided (stays in register the whole time for example) and we don't want to hinder that.
+																									// NOTE: Although on second thought, this technique doesn't really do anything in this case since the compiler can easily optimize it even if we just use a copy. 
+		size_t versionStringSize;
+		err = clGetPlatformInfo(currentPlatform, CL_PLATFORM_VERSION, 0, nullptr, &versionStringSize);
+		if (err != CL_SUCCESS) { delete[] contextEndIndices; delete[] contexts; delete[] platforms; return OpenCLDeviceCollection(); }
+
+		char* versionString = new (std::nothrow) char[versionStringSize];
+		if (!versionString) {
+			err = CL_EXT_INSUFFICIENT_HOST_MEM;
+			delete[] contextEndIndices;
+			delete[] contexts;
+			delete[] platforms;
+			return OpenCLDeviceCollection();
+		}
+		err = clGetPlatformInfo(currentPlatform, CL_PLATFORM_VERSION, versionStringSize, versionString, nullptr);
+		if (err != CL_SUCCESS) {
+			delete[] versionString;
+			delete[] contextEndIndices;
+			delete[] contexts;
+			delete[] platforms;
+			return OpenCLDeviceCollection();
+		}
+
+		if (convertOpenCLVersionStringToVersionIdentifier(versionString) >= minimumPlatformVersion) {
+			delete[] versionString;
+
+			cl_uint deviceCount;
+			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_ALL, 0, nullptr, &deviceCount);
+			if (err != CL_SUCCESS) {
+				delete[] contextEndIndices;
+				delete[] contexts;
+				delete[] platforms;
+				return OpenCLDeviceCollection();
+			}
+			if (!deviceCount) {
+				err = CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM;
+				delete[] contextEndIndices;
+				delete[] contexts;
+				delete[] platforms;
+				return OpenCLDeviceCollection();
+			}
+
+			size_t devices_before_length = devices.size();
+			cl_device_id* newDevices = devices.data() + devices_before_length;
+			size_t devices_new_length = devices_before_length + deviceCount; 
+			devices.resize(devices_new_length);
+			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_ALL, deviceCount, newDevices, nullptr);
+			if (err != CL_SUCCESS) {
+				delete[] contextEndIndices;
+				delete[] contexts;
+				delete[] platforms;
+				return OpenCLDeviceCollection();
+			}
+
+			contexts[i] = clCreateContext(nullptr, deviceCount, newDevices, nullptr, nullptr, &err);
+			if (err != CL_SUCCESS) {
+				delete[] contextEndIndices;
+				delete[] contexts;
+				delete[] platforms;
+				return OpenCLDeviceCollection();
+			}
+			contextEndIndices[i] = devices_new_length;
+
+			continue;
+		}
+		delete[] versionString;
+	}
+	// TODO: Rewrite so that you don't have to use vector, since it doesn't let you do what you want to do.
+
+}
+
+// TODO: Think about just removing this function and somehow having the OpenCLDeviceCollection thing be sortable and filterable and just do it like that.
 cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) {
 	cl_uint platformCount;
 	cl_int err = clGetPlatformIDs(0, nullptr, &platformCount);
@@ -123,8 +221,8 @@ cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatfor
 
 	size_t bestDeviceMaxWorkGroupSize = 0;
 	for (int i = 0; i < platformCount; i++) {
-		cl_platform_id& currentPlatform = platforms[i];												// NOTE: You might think you can just as well leave out the reference, but I think it is probably better with the reference since there are ways a copy can be avoided (stays in register the whole time for example) and we don't want to hinder that.
-
+		const cl_platform_id& currentPlatform = platforms[i];										// NOTE: You might think you can just as well leave out the reference, but I think it is probably better with the reference since there are ways a copy can be avoided (stays in register the whole time for example) and we don't want to hinder that.
+																									// NOTE: Although on second thought, this technique doesn't really do anything in this case since the compiler can easily optimize it even if we just use a copy. 
 		size_t versionStringSize;
 		err = clGetPlatformInfo(currentPlatform, CL_PLATFORM_VERSION, 0, nullptr, &versionStringSize);
 		if (err != CL_SUCCESS) { delete[] platforms; return err; }

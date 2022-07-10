@@ -629,22 +629,62 @@ struct VersionIdentifier {
 
 class OpenCLDeviceCollection {
 public:
-	cl_context* contexts;
-	size_t* contextEndIndices;
+	cl_context* contexts = nullptr;
+	size_t* contextEndIndices = nullptr;
 	size_t contexts_length;
-	cl_device_id* devices;
-	cl_device_type* deviceTypes;
+	cl_device_id* devices = nullptr;
 	size_t devices_length;
+
+	constexpr OpenCLDeviceCollection() noexcept : devices_length(0), contexts_length(0) { }
 
 	constexpr OpenCLDeviceCollection(cl_int err, size_t contexts_length, size_t devices_length) noexcept : devices_length(devices_length), contexts_length(contexts_length) {
 		devices = new (std::nothrow) cl_device_id[devices_length];
 		if (!devices) { err = 0; return; }			// TODO: Make this actually return the right error codes.
-		deviceTypes = new (std::nothrow) cl_device_type[devices_length];
-		if (!deviceTypes) { delete[] devices; err = 0; return; }
 		contexts = new (std::nothrow) cl_context[contexts_length];
-		if (!contexts) { delete[] deviceTypes; delete[] devices; err = 0; return; }
+		if (!contexts) { delete[] devices; err = 0; return; }
 		contextEndIndices = new (std::nothrow) size_t[contexts_length];
-		if (!contextEndIndices) { delete[] contexts; delete[] deviceTypes; delete[] devices; err = 0; return; }
+		if (!contextEndIndices) { delete[] contexts; delete[] devices; err = 0; return; }
+	}
+
+	OpenCLDeviceCollection(const OpenCLDeviceCollection& right) = delete;
+	// SIDE-NOTE: Move constructor is deleted automatically if copy constructor is deleted.
+	
+	constexpr OpenCLDeviceCollection(OpenCLDeviceCollection&& right) noexcept : 
+		contexts(right.contexts), contextEndIndices(right.contextEndIndices), contexts_length(right.contexts_length), 
+		devices(right.devices), devices_length(right.devices_length)
+	{
+		right.contexts = nullptr;
+		right.contextEndIndices = nullptr;
+		right.devices = nullptr;
+	}
+
+	OpenCLDeviceCollection& operator=(const OpenCLDeviceCollection& right) = delete;
+	// Move assignment operator is deleted automatically if copy assignment operator is deleted.
+
+	constexpr void swap(OpenCLDeviceCollection& other) noexcept {
+		cl_context* temp_contexts = contexts;
+		contexts = other.contexts;
+		other.contexts = temp_contexts;
+
+		size_t* temp_contextEndIndices = contextEndIndices;
+		contextEndIndices = other.contextEndIndices;
+		other.contextEndIndices = contextEndIndices;
+
+		size_t temp_contexts_length = contexts_length;
+		contexts_length = other.contexts_length;
+		other.contexts_length = temp_contexts_length;
+
+		cl_device_id* temp_devices = devices;
+		devices = other.devices;
+		other.devices = temp_devices;
+
+		size_t temp_devices_length = devices_length;
+		devices_length = other.devices_length;
+		other.devices_length = temp_devices_length;
+	}
+
+	constexpr OpenCLDeviceIndexCollection createDeviceIndexCollection(cl_int& err) const noexcept {
+		return OpenCLDeviceIndexCollection(err, this, devices_length);
 	}
 
 	constexpr cl_device_id& operator[](size_t index) noexcept { return devices[index]; }
@@ -669,19 +709,74 @@ public:
 		}
 	}
 
-	constexpr OpenCLDeviceCollection getDevicesWithSpecificType(cl_device_type deviceType) noexcept {
-
-	}
-
-	constexpr OpenCLDeviceCollection getDevicesWithTypeOtherThan(cl_device_type deviceType) noexcept {
-		// TODO: implement this.
-	}
-
 	constexpr ~OpenCLDeviceCollection() noexcept {
 		delete[] contextEndIndices;
 		delete[] contexts;
-		delete[] deviceTypes;
 		delete[] devices;
+	}
+};
+
+class OpenCLDeviceIndexCollection {
+	const OpenCLDeviceCollection* data;
+
+public:
+	size_t* indices = nullptr;
+	size_t length;
+
+	constexpr OpenCLDeviceIndexCollection() noexcept = default;
+
+	constexpr OpenCLDeviceIndexCollection(cl_int& err, const OpenCLDeviceCollection* data, size_t length) noexcept : 
+		data(data), length(length) 
+	{
+		indices = new (std::nothrow) size_t[length];
+		if (!indices) { err = CL_EXT_INSUFFICIENT_HOST_MEM; }
+	}
+
+	constexpr OpenCLDeviceIndexCollection(cl_int& err, const OpenCLDeviceIndexCollection& right) noexcept : length(right.length) {
+		indices = new (std::nothrow) size_t[length];
+		if (!indices) { err = CL_EXT_INSUFFICIENT_HOST_MEM; }
+	}
+
+	constexpr OpenCLDeviceIndexCollection(const OpenCLDeviceIndexCollection& right) noexcept : length(right.length) {
+		indices = new (std::nothrow) size_t[length];
+	}
+
+	constexpr OpenCLDeviceIndexCollection(OpenCLDeviceIndexCollection&& right) noexcept : length(right.length) {
+		indices = right.indices;
+		right.indices = nullptr;
+	}
+
+	OpenCLDeviceIndexCollection& operator=(const OpenCLDeviceIndexCollection& right) = delete;
+	// Move assignment operator is deleted automatically if copy assignment operator is deleted.
+
+	constexpr void swap(OpenCLDeviceIndexCollection& other) noexcept {
+		const OpenCLDeviceCollection* temp_data = data;
+		data = other.data;
+		other.data = temp_data;
+
+		size_t* temp_indices = indices;
+		indices = other.indices;
+		other.indices = temp_indices;
+
+		size_t temp_length = length;
+		length = other.length;
+		other.length = temp_length;
+	}
+
+	constexpr OpenCLDeviceIndexCollection removeDevicesOfType(cl_device_type computeDeviceType) const noexcept {
+
+	}
+
+	constexpr OpenCLDeviceIndexCollection removeDevicesNotOfType(cl_device_type computeDeviceType) const noexcept {
+
+	}
+
+	constexpr OpenCLDeviceIndexCollection sortByWorkGroupSize() const noexcept {
+
+	}
+
+	constexpr ~OpenCLDeviceIndexCollection() noexcept {
+		delete[] indices;		// Doesn't set indices to nullptr, but that doesn't matter in this case.
 	}
 };
 
@@ -723,7 +818,7 @@ VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* stri
 
 // TODO: Consider putting all this opencl stuff in a namespace to avoid collisions and messiness.
 
-cl_int getAllOpenCLDevices(const VersionIdentifier& minimumPlatformVersion, DeviceCollection& devices);
+OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier& minimumPlatformVersion);
 
 // Finds the most optimal device in the available list of devices on the system and initializes basic OpenCL variables based on that device.
 // NOTE: In case you want to only bind the functions that this function uses, it uses:
