@@ -729,11 +729,11 @@ public:
 
 	constexpr OpenCLDeviceIndexCollection() noexcept = default;
 
-	constexpr OpenCLDeviceIndexCollection(cl_int& err, const OpenCLDeviceCollection* data, size_t length) noexcept : 
+	constexpr OpenCLDeviceIndexCollection(cl_int& err, const OpenCLDeviceCollection* data) noexcept : 
 		data(data), length(length) 
 	{
-		indices = new (std::nothrow) size_t[length];
-		if (!indices) { err = CL_EXT_INSUFFICIENT_HOST_MEM; }
+		//indices = new (std::nothrow) size_t[length];
+		//if (!indices) { err = CL_EXT_INSUFFICIENT_HOST_MEM; }
 	}
 
 	constexpr OpenCLDeviceIndexCollection(cl_int& err, const OpenCLDeviceIndexCollection& right) noexcept : length(right.length) {
