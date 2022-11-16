@@ -5,7 +5,7 @@
 
 #include <cstdint>						// For fixed-width types.
 
-#include <new>							// For std::nothrow.	//TODO: And maybe the actual new overload that I'm using?
+#include <new>							// For std::nothrow.
 
 #include <vector>
 
@@ -13,25 +13,18 @@
 
 #include <string>						// For std::string.
 
-VersionIdentifier::VersionIdentifier(uint16_t major, uint16_t minor) : major(major), minor(minor) { }
-
-bool VersionIdentifier::operator>=(const VersionIdentifier& rightSide) {
-	if (major > rightSide.major) { return true; }
-	if (major < rightSide.major) { return false; }
-	if (minor > rightSide.minor) { return true; }
-	if (minor < rightSide.minor) { return false; }
-	return true;
-}
+#include <limits>						// for std::numeric_limits
 
 HMODULE DLLHandle;
 
-bool loadOpenCLLib() { return DLLHandle = LoadLibraryA("OpenCL.dll"); }
+bool loadOpenCLLib() noexcept { return DLLHandle = LoadLibraryA("OpenCL.dll"); }
 
 bool bind_clGetPlatformIDs() { return clGetPlatformIDs = (clGetPlatformIDs_func)GetProcAddress(DLLHandle, "clGetPlatformIDs"); }
 bool bind_clGetPlatformInfo() { return clGetPlatformInfo = (clGetPlatformInfo_func)GetProcAddress(DLLHandle, "clGetPlatformInfo"); }
 bool bind_clGetDeviceIDs() { return clGetDeviceIDs = (clGetDeviceIDs_func)GetProcAddress(DLLHandle, "clGetDeviceIDs"); }
 bool bind_clGetDeviceInfo() { return clGetDeviceInfo = (clGetDeviceInfo_func)GetProcAddress(DLLHandle, "clGetDeviceInfo"); }
 bool bind_clCreateContext() { return clCreateContext = (clCreateContext_func)GetProcAddress(DLLHandle, "clCreateContext"); }
+bool bind_clGetContextInfo() { return clGetContextInfo = (clGetContextInfo_func)GetProcAddress(DLLHandle, "clGetContextInfo"); }
 bool bind_clCreateCommandQueue() { return clCreateCommandQueue = (clCreateCommandQueue_func)GetProcAddress(DLLHandle, "clCreateCommandQueue"); }
 bool bind_clCreateProgramWithSource() { return clCreateProgramWithSource = (clCreateProgramWithSource_func)GetProcAddress(DLLHandle, "clCreateProgramWithSource"); }
 bool bind_clBuildProgram() { return clBuildProgram = (clBuildProgram_func)GetProcAddress(DLLHandle, "clBuildProgram"); }
@@ -56,7 +49,7 @@ bool bind_clReleaseContext() { return clReleaseContext = (clReleaseContext_func)
 
 #define CHECK_FUNC_VALIDITY(func) if (!(func)) { FreeLibrary(DLLHandle); return CL_EXT_DLL_FUNC_BIND_FAILURE; }
 
-cl_int initOpenCLBindings() {
+cl_int initOpenCLBindings() noexcept {
 	if (!loadOpenCLLib()) { return CL_EXT_DLL_LOAD_FAILURE; }
 
 	CHECK_FUNC_VALIDITY(bind_clGetPlatformIDs());										// Go through all the functions and bind them one by one.
@@ -64,6 +57,7 @@ cl_int initOpenCLBindings() {
 	CHECK_FUNC_VALIDITY(bind_clGetDeviceIDs());
 	CHECK_FUNC_VALIDITY(bind_clGetDeviceInfo());
 	CHECK_FUNC_VALIDITY(bind_clCreateContext());
+	CHECK_FUNC_VALIDITY(bind_clGetContextInfo());
 	CHECK_FUNC_VALIDITY(bind_clCreateCommandQueue());
 	CHECK_FUNC_VALIDITY(bind_clCreateProgramWithSource());
 	CHECK_FUNC_VALIDITY(bind_clBuildProgram());
@@ -89,7 +83,9 @@ cl_int initOpenCLBindings() {
 	return CL_SUCCESS;
 }
 
-bool freeOpenCLLib() { return FreeLibrary(DLLHandle); }
+bool freeOpenCLLib() noexcept { return FreeLibrary(DLLHandle); }
+
+// TODO: noexcept more things.
 
 // NOTE: Assumes that the input is clean.
 uint16_t convertStringToUInt16(const char* string, size_t length) {
@@ -196,9 +192,9 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 	* NOTE: We go through everything, get the counts, then construct the OpenCLDeviceCollection, go through everything again
 	* and get the data. The reason we do this is because std::vector isn't able to lose control of it's data.
 	* We could create our own std::vector (would be easy in this case since we barely use any of the functionality) and add
-	* the functionality that we want, but this is easier. This solution is presumably minimally worse (can't definitively tell
+	* the functionality that we want, but this is easier. This solution is possibly minimally worse (can't definitively tell
 	* until you benchmark it though), but this function is only run once so it's totally not a problem.
-	* TODO: Maybe as a future improvement, consider doing it with a custom vector.
+	* TODO: Maybe as a future improvement, consider trying it with a custom vector.
 	* 
 	*/
 
@@ -228,7 +224,6 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 	return result;
 }
 
-// TODO: Think about just removing this function and somehow having the OpenCLDeviceCollection thing be sortable and filterable and just do it like that.
 cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) {
 	/*cl_uint platformCount;
 	cl_int err = clGetPlatformIDs(0, nullptr, &platformCount);
@@ -303,18 +298,80 @@ cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatfor
 
 
 	cl_int err;
+
 	OpenCLDeviceCollection devices = getAllOpenCLDevices(err, minimumTargetPlatformVersion);
 	if (err != CL_SUCCESS) { return err; }
+
 	OpenCLDeviceIndexCollection deviceIndices = devices.createDeviceIndexCollection(err);
 	if (err != CL_SUCCESS) { return err; }
 
-	OpenCLDeviceIndexCollection sortedDeviceIndices = deviceIndices.sortByWorkGroupSize();
+	OpenCLDeviceIndexCollection sortedDeviceIndices = deviceIndices.sort_by_increasing_max_work_group_size(err);
+	if (err != CL_SUCCESS) { return err; }
+
 	bestDevice = devices[sortedDeviceIndices[sortedDeviceIndices.length - 1]];
 	context = devices.getContextForDeviceIndex(sortedDeviceIndices[sortedDeviceIndices.length - 1]);
+
 	commandQueue = clCreateCommandQueue(context, bestDevice, 0, &err);
 	if (err != CL_SUCCESS) { return err; }
 
-	// TODO: Get platform from context with opencl calls.
+	/*
+	size_t context_properties_size;
+	err = clGetContextInfo(context, CL_CONTEXT_PROPERTIES, 0, nullptr, &context_properties_size);
+	if (err != CL_SUCCESS) { return err; }
+
+	cl_context_properties* context_properties = new (std::nothrow) cl_context_properties[context_properties_size];
+	err = clGetContextInfo(context, CL_CONTEXT_PROPERTIES, context_properties_size, context_properties, nullptr);
+	if (err != CL_SUCCESS) { return err; }
+
+	for (size_t i = 0; i < context_properties_size; i += 2) {
+		if (context_properties[i] == CL_CONTEXT_PLATFORM) {
+			// NOTE: This is how I would've done it, if reintrepet_casting from char
+			// would be allowed in the standard and if both types were the same width.
+			// I've heard it's coming soon,
+			// so maybe we could use this eventually.
+			// NOTE: The reason I would've gone through char* is because or else it's
+			// undefined behaviour. See strict aliasing or something I think.
+			//bestPlatform = *(cl_platform_id*)(char*)&context_properties[i + 1];
+			// NOTE: Now this may be UB, but it's such an integral feature for so many programs
+			// that most if not all compilers support it, but I would like to avoid UB if possible.
+
+			// NOTE: As far as the problems that would arise if one could reinterpret_cast
+			// wildly from type to type, the above way of doing it isn't bad at all,
+			// you just need to make sure not to use the previous pointer and the new pointer
+			// in the same blocks of code, prefferrably never use the previous pointer again.
+			// Then, the compiler can optimize everything so that there are no downsides.
+			// NOTE: There aren't really any downsides anyway because we are just reading,
+			// and we never write, so caching and ordering and such cannot cause us harm.
+
+			// NOTE: There is a way to get around all this with memcpy or std::copy or something,
+			// at least that's what I've heard, but I'm not willing to sacrifice performance
+			// just because C++ is an unpolished mess of a language.
+
+			// NOTE: Anyway, the above wouldn't work anyway since the types can be different
+			// widths, but C++ still has a problem with handling type punning, so I'm leaving the
+			// comments in to reference later if I need to.
+
+			// NOTE: Luckily, since intptr_t is always an integer (I think) (or maybe sometimes
+			// a pointer, which would also be ok for this) and cl_platform_id is always a pointer,
+			// the normal conversion between the two is more than sufficient for this use-case.
+			bestPlatform = (cl_platform_id)context_properties[i + 1];
+
+			return CL_SUCCESS;
+		}
+	}
+
+	// NOTE: Sort of suboptimal error code to return since other places can also cause it in
+	// this function, but this instance should never really be thrown unless there is a bug
+	// somewhere or the OpenCL implementation is buggy or something, so it's fine.
+	// It's mainly just for me, the developer.
+	return CL_EXT_NO_PLATFORMS_FOUND;
+	*/
+
+	// NOTE: The above code only returns the platform if you explicitly specified the platform in clCreateContext(),
+	// which we did not and will not. Instead, let's do it like this:
+
+	err = clGetDeviceInfo(bestDevice, CL_DEVICE_PLATFORM, sizeof(cl_platform_id), &bestDevice, nullptr);
+	if (err != CL_SUCCESS) { return err; }
 
 	return CL_SUCCESS;
 }
