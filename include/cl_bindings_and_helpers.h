@@ -126,6 +126,10 @@
 #define CL_EXT_CREATE_KERNEL_FAILED						13
 #define CL_EXT_GET_KERNEL_WORK_GROUP_INFO_FAILED		14
 
+/* cl_bool */
+#define CL_FALSE                                    0
+#define CL_TRUE                                     1
+
 /* cl_platform_info */
 #define CL_PLATFORM_PROFILE                         0x0900
 #define CL_PLATFORM_VERSION                         0x0901
@@ -601,8 +605,8 @@ inline clEnqueueReadBuffer_func clEnqueueReadBuffer;
 typedef cl_int (CL_API_CALL* clEnqueueWriteImage_func)(cl_command_queue command_queue, 
 													   cl_mem image, 
 													   cl_bool blocking_write, 
-													   const size_t* origin, 
-													   const size_t* region, 
+													   const size_t origin[3], 
+													   const size_t region[3], 
 													   size_t input_row_pitch, 
 													   size_t input_slice_pitch, 
 													   const void* ptr, 
@@ -615,8 +619,8 @@ inline clEnqueueWriteImage_func clEnqueueWriteImage;
 typedef cl_int (CL_API_CALL* clEnqueueReadImage_func)(cl_command_queue command_queue, 
 													  cl_mem image, 
 													  cl_bool blocking_read, 
-													  const size_t* origin, 
-													  const size_t* region, 
+													  const size_t origin[3], 
+													  const size_t region[3], 
 													  size_t row_pitch, 
 													  size_t slice_pitch, 
 													  void* ptr, 
