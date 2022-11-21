@@ -681,28 +681,33 @@ public:
 	constexpr OpenCLDeviceCollection(cl_int& err, size_t contexts_length, size_t devices_length) noexcept : devices_length(devices_length), contexts_length(contexts_length) {
 		devices = new (std::nothrow) cl_device_id[devices_length];
 		if (!devices) { err = CL_EXT_INSUFFICIENT_HOST_MEM; return; }
+
 		contexts = new (std::nothrow) cl_context[contexts_length];
-		if (!contexts) { delete[] devices; err = CL_EXT_INSUFFICIENT_HOST_MEM; return; }
+		if (!contexts) {
+			delete[] devices;
+			devices = nullptr;
+			err = CL_EXT_INSUFFICIENT_HOST_MEM;
+			return;
+		}
+
 		contextEndIndices = new (std::nothrow) size_t[contexts_length];
-		if (!contextEndIndices) { delete[] contexts; delete[] devices; err = CL_EXT_INSUFFICIENT_HOST_MEM; return; }
+		if (!contextEndIndices) {
+			delete[] contexts;
+			contexts = nullptr;
+			delete[] devices;
+			devices = nullptr;
+			err = CL_EXT_INSUFFICIENT_HOST_MEM;
+			return;
+		}
 
 		err = CL_SUCCESS;
 	}
 
-	OpenCLDeviceCollection(const OpenCLDeviceCollection& right) = delete;
-	// NOTE: Move constructor is deleted automatically if copy constructor is deleted.
-	
-	constexpr OpenCLDeviceCollection(OpenCLDeviceCollection&& right) noexcept : 
-		contexts(right.contexts), contextEndIndices(right.contextEndIndices), contexts_length(right.contexts_length), 
-		devices(right.devices), devices_length(right.devices_length)
-	{
-		right.contexts = nullptr;
-		right.contextEndIndices = nullptr;
-		right.devices = nullptr;
-	}
-
 	OpenCLDeviceCollection& operator=(const OpenCLDeviceCollection& right) = delete;
 	// Move assignment operator is deleted automatically if copy assignment operator is deleted.
+	// So is move constructor and the copy constructor.
+	// NOTE: My way of thinking about it is that the move functions never existed to begin with, they just defaulted to the copy functions.
+	// Now that those are deleted, there's nothing to default to and therefor you cannot move either.
 
 	constexpr void swap(OpenCLDeviceCollection& other) noexcept {
 		cl_context* temp_contexts = contexts;
