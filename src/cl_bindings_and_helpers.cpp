@@ -414,10 +414,11 @@ cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, con
 			// Obviously, since the in between code wasn't executed, the values of the "extra" variables that were pushed are just uninitialized, so you probably shouldn't
 			// read from them in the after-the-goto code, but you can write to them and use them, which surprised me, but makes sense given the behaviour that I just
 			// talked about.
-			// ANYWAY: The reason one works and the other doesn't even though they are the same thing is because the compiler can't assign any values to the variable
+			// ANYWAY: The reason "int x; x = 1;" works and "int x = 1;" doesn't even though they are the same thing is because the compiler can't assign any values to the variable
 			// if you skip it, since the code execution is skipped. In order to make that explicit, the language forces you to do a bare minimum declaration as a way to
 			// describe what is happening under the hood in greater detail. Probably to minimize bugs and stuff. I might be wrong about some of this, but this makes
 			// the most sense to me.
+			// TODO: This makes zero sense, maybe figure out why this actually is allowed. I'm so done with C++, jesus christ.
 
 			err = clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &buildLogSize);
 			if (err != CL_SUCCESS) { clReleaseProgram(program); return err; }

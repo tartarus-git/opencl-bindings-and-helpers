@@ -668,6 +668,12 @@ struct VersionIdentifier {
 
 class OpenCLDeviceIndexCollection;
 
+enum class OpenCLDeviceCollection_state : uint8_t {
+	RELEASED,
+	INITIALIZED,
+	CORRUPTED
+};
+
 class OpenCLDeviceCollection {
 public:
 	cl_context* contexts = nullptr;
@@ -708,6 +714,15 @@ public:
 	// So is move constructor and the copy constructor.
 	// NOTE: My way of thinking about it is that the move functions never existed to begin with, they just defaulted to the copy functions.
 	// Now that those are deleted, there's nothing to default to and therefor you cannot move either.
+
+	constexpr OpenCLDeviceCollection_state get_state() const noexcept {
+		uint8_t initialized_sum = (bool)contexts + (bool)contextEndIndices + (bool)devices;
+		switch (initialized_sum) {
+		case 0: return OpenCLDeviceCollection_state::RELEASED;
+		case 3: return OpenCLDeviceCollection_state::INITIALIZED;
+		default: return OpenCLDeviceCollection_state::CORRUPTED;
+		}
+	}
 
 	constexpr void swap(OpenCLDeviceCollection& other) noexcept {
 		cl_context* temp_contexts = contexts;
