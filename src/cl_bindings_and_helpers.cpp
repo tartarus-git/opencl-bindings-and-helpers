@@ -414,11 +414,17 @@ cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, con
 			// Obviously, since the in between code wasn't executed, the values of the "extra" variables that were pushed are just uninitialized, so you probably shouldn't
 			// read from them in the after-the-goto code, but you can write to them and use them, which surprised me, but makes sense given the behaviour that I just
 			// talked about.
-			// ANYWAY: The reason "int x; x = 1;" works and "int x = 1;" doesn't even though they are the same thing is because the compiler can't assign any values to the variable
-			// if you skip it, since the code execution is skipped. In order to make that explicit, the language forces you to do a bare minimum declaration as a way to
-			// describe what is happening under the hood in greater detail. Probably to minimize bugs and stuff. I might be wrong about some of this, but this makes
-			// the most sense to me.
-			// TODO: This makes zero sense, maybe figure out why this actually is allowed. I'm so done with C++, jesus christ.
+			// ANYWAY: The reason "int x; x = 1;" works and "int x = 1;" doesn't even though they are the same thing is because the compiler can't put an uninitialized thing on the stack if that thing uses some sort of special constructor. Now scalar types like int can never
+			// use some special constructor, since they're primitive, but stuff like structs and such
+			// can only work if you default initialize them and if the default constructor is trivial (I believe that essentially
+			// means it doesn't really do anything to prevent uninitialization, something like that).
+			// So that the default constructor is used when goto is hit and also when it is not hit, the code itself
+			// must do "class instance;" instead of "class instance = ...;", since this is simpler than using special constructor
+			// when goto is not hit and default constructor when goto is hit.
+			// Like I said, all this doesn't really apply to scalar types, but I guess they work the same way for simplicity, thank god.
+			// BOTTOM-LINE: All this is to enforce the fact that the compiler can trivially bump the stack when doing goto,
+			// and forcing "class instance;" is simply to enforce the invokation of the default constructor whether goto is hit or not,
+			// since that is simpler than the alternative.
 
 			err = clGetProgramBuildInfo(program, device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &buildLogSize);
 			if (err != CL_SUCCESS) { clReleaseProgram(program); return err; }
