@@ -746,9 +746,7 @@ public:
 		other.devices_length = temp_devices_length;
 	}
 
-	constexpr OpenCLDeviceIndexCollection createDeviceIndexCollection(cl_int& err) const noexcept {
-		return OpenCLDeviceIndexCollection(err, this);
-	}
+	OpenCLDeviceIndexCollection createDeviceIndexCollection(cl_int& err) const noexcept;
 
 	constexpr cl_device_id& operator[](size_t index) noexcept { return devices[index]; }
 	constexpr const cl_device_id& operator[](size_t index) const noexcept { return devices[index]; }
@@ -996,6 +994,10 @@ public:
 		delete[] indices;		// NOTE: Don't worry, doesn't do anything if it's nullptr.
 	}
 };
+
+inline OpenCLDeviceIndexCollection OpenCLDeviceCollection::createDeviceIndexCollection(cl_int& err) const noexcept {
+	return OpenCLDeviceIndexCollection(err, this);
+}
 
 bool loadOpenCLLib() noexcept;
 
