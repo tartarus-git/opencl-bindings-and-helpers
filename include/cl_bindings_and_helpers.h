@@ -731,7 +731,7 @@ public:
 
 		size_t* temp_contextEndIndices = contextEndIndices;
 		contextEndIndices = other.contextEndIndices;
-		other.contextEndIndices = contextEndIndices;
+		other.contextEndIndices = temp_contextEndIndices;
 
 		size_t temp_contexts_length = contexts_length;
 		contexts_length = other.contexts_length;
@@ -799,8 +799,27 @@ public:
 		err = CL_SUCCESS;
 	}
 
-	cl_int increase_space() noexcept {
-		size_t new_capacity = capacity + 128;
+	cl_int resize(size_t new_length) noexcept {
+		/*
+		* If new_length is smaller than capacity, this function will essentially set length to new_length and then do a shrink_to_fit.
+		* If new_length is the same as capacity, we still call realloc because I assume that the cost isn't high when calling it with
+		* values that are lower than or equal to the existing allocation's size, since then it doesn't have to move the allocation in memory.
+		* Basically I don't want to waste processing time with an if statement that checks whether new_length == capacity, because why should I? I shouldn't.
+		* We would be avoiding the realloc in that case, but we've just covered that it would be super fast anyway, so the reward doesn't outweigh the cost.
+		*/
+
+		element_t* new_data = (element_t*)realloc(data, new_length * sizeof(element_t));
+		if (!new_data) { return CL_EXT_INSUFFICIENT_HOST_MEM; }
+
+		data = new_data;
+		length = new_length;
+		capacity = length;
+
+		return CL_SUCCESS;
+	}
+
+	cl_int increase_space(size_t addition) noexcept {
+		size_t new_capacity = capacity + addition;
 		element_t* new_data = (element_t*)realloc(data, new_capacity * sizeof(element_t));
 		if (!new_data) { return CL_EXT_INSUFFICIENT_HOST_MEM; }
 
@@ -810,6 +829,8 @@ public:
 		return CL_SUCCESS;
 	}
 
+	cl_int increase_space() noexcept { return increase_space(128); }
+
 	constexpr cl_int push_back(const element_t& element) noexcept {
 		if (length == capacity) {
 			cl_int err = increase_space();
@@ -817,6 +838,22 @@ public:
 		}
 
 		data[length++] = element;
+
+		return CL_SUCCESS;
+	}
+
+	constexpr cl_int push_empty_back(size_t addition_length) noexcept {
+		size_t new_length = length + addition_length;
+
+		if (new_length <= capacity) { length = new_length; return CL_SUCCESS; }
+
+		size_t difference = new_length - capacity;
+		size_t aligned_difference = 128 - (difference - 1) % 128 - 1 + difference;			// TODO: Replace other, weirder aligning code somewhere in the codebase with this version, this one looks nice.
+
+		cl_int err = increase_space(aligned_difference);
+		if (err != CL_SUCCESS) { return err; }
+
+		length = new_length;
 
 		return CL_SUCCESS;
 	}
@@ -843,7 +880,7 @@ public:
 	}
 
 	~custom_vector() noexcept {
-		delete[] data;			// NOTE: Doesn't do anything if data is nullptr.
+		free(data);					// NOTE: Doesn't do anything if data is nullptr.
 	}
 };
 
