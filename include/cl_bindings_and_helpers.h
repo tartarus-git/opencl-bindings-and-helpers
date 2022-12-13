@@ -715,6 +715,13 @@ public:
 	// NOTE: My way of thinking about it is that the move functions never existed to begin with, they just defaulted to the copy functions.
 	// Now that those are deleted, there's nothing to default to and therefor you cannot move either.
 
+	// NOTE: BUT we actually do need a move constructor so that one can return this class from a function.
+	constexpr OpenCLDeviceCollection(OpenCLDeviceCollection&& other) noexcept : devices_length(other.devices_length), contexts_length(other.contexts_length) {
+		devices = other.devices; other.devices = nullptr;
+		contexts = other.contexts; other.contexts = nullptr;
+		contextEndIndices = other.contextEndIndices; other.contextEndIndices = nullptr;
+	}
+
 	constexpr OpenCLDeviceCollection_state get_state() const noexcept {
 		uint8_t initialized_sum = (bool)contexts + (bool)contextEndIndices + (bool)devices;
 		switch (initialized_sum) {

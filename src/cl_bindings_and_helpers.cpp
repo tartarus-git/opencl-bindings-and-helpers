@@ -209,6 +209,18 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 		}
 	}
 
+	OpenCLDeviceCollection result;
+	result.devices_length = devices.length;
+	result.contexts_length = contexts.length;
+	result.devices = devices.steal_data(err);
+	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
+	result.contexts = contexts.steal_data(err);
+	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
+	result.contextEndIndices = context_end_indices.steal_data(err);
+	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
+	return result;
+
+
 	/*
 	* 
 	* NOTE: We go through everything, get the counts, then construct the OpenCLDeviceCollection, go through everything again
@@ -220,6 +232,7 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 	* 
 	*/
 
+	/*
 	size_t validPlatformsCount = validPlatforms.size();
 
 	OpenCLDeviceCollection result(err, validPlatformsCount, totalDeviceCount);
@@ -244,6 +257,7 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 	}
 
 	return result;
+	*/
 }
 
 cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) {
@@ -419,7 +433,6 @@ char* readFromSourceFile(const char* sourceFile, cl_int& errorCode) {
 cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, const char* sourceCodeString, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog) {
 	cl_int err;
 	program = clCreateProgramWithSource(context, 1, (const char* const*)&sourceCodeString, nullptr, &err);
-	delete[] sourceCodeString;
 	if (!program) { return CL_EXT_CREATE_PROGRAM_FAILED; }
 
 	switch (clBuildProgram(program, 0, nullptr, nullptr, nullptr, nullptr)) {
@@ -495,5 +508,7 @@ cl_int setupComputeKernelFromFile(cl_context context, cl_device_id device, const
 	cl_int err;
 	const char* sourceCodeString = readFromSourceFile(sourceCodeFile, err);
 	if (!sourceCodeString) { return err; }
-	return setupComputeKernelFromString(context, device, sourceCodeString, kernelName, program, kernel, kernelWorkGroupSize, buildLog);
+	err = setupComputeKernelFromString(context, device, sourceCodeString, kernelName, program, kernel, kernelWorkGroupSize, buildLog);
+	delete[] sourceCodeString;
+	return err;
 }
