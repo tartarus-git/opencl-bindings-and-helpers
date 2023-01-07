@@ -1,17 +1,17 @@
 #pragma once
 
-#include <cstdint>                                                                                  // Used for fixed-width types.
-#include <string>																					// Used for access to std::string.
+#include <cstdint>			// Used for fixed-width types.
+#include <string>			// Used for access to std::string.
 
-#include <new>																						// for non-throwing new operator.
+#include <new>				// for non-throwing new operator.
 
-#include <algorithm>																				// for std::copy() and std::sort()
+#include <algorithm>			// for std::copy() and std::sort()
 
 #include <cstdlib>
 
 // NOTE: These almost definitely only work in Windows, so if you ever want to port this to another system, these definitely need to change.
-#define CL_API_CALL _stdcall                                                                        // Calling covention for the OpenCL API calls.
-#define CL_CALLBACK _stdcall																		// Calling convention for the OpenCL callback functions.
+#define CL_API_CALL _stdcall		// Calling covention for the OpenCL API calls.
+#define CL_CALLBACK _stdcall		// Calling convention for the OpenCL callback functions.
 
 // NOTE: OpenCL is backwards-compatible. So stuff from older versions stays for newer versions unless it's been deprecated.
 // NOTE: OpenCL has this CL_VERSION_X_X define system, where every define for every version under or equal to the version you're currently targeting is defined.
@@ -19,20 +19,20 @@
 
 // NOTE: The way this library will work is that it'll assume you're targeting the latest version and give you all the tools you need for that.
 // NOTE: Since OpenCL is backwards-compatible though, you can target whichever version you want or decide at runtime, and as long as you don't use deprecated
-// NOTE: features, you should be able to rely on it working just fine.
+// features, you should be able to rely on it working just fine.
 
 // NOTE: So that you know which features will be available and which won't inside the actual DLL that you're going to be linking with based on the version info that
-// NOTE: it gives you, I'm going to comment which features were introduced in which version. Uncommented features have been there since the beginning and are super
-// NOTE: safe to use.
+// it gives you, I'm going to comment which features were introduced in which version. Uncommented features have been there since the beginning and are super
+// safe to use.
 
-#define CL_EXT_VERSION_STRING_PREFIX_LENGTH (sizeof("OpenCL ") - 1)
+#define CL_EXT_VERSION_STRING_PREFIX_LENGTH (sizeof("OpenCL ") - sizeof(char))
 
 // NOTE: Floats in OpenCL are always 32-bit as far as I can tell by looking at the docs, so don't worry about other sizes.
 #define CL_EXT_FLOAT_SIZE 4
 
 /* Error Codes */
-#define CL_SUCCESS									 0
-#define CL_DEVICE_NOT_FOUND							-1
+#define CL_SUCCESS                                   0
+#define CL_DEVICE_NOT_FOUND                         -1
 #define CL_DEVICE_NOT_AVAILABLE                     -2
 #define CL_COMPILER_NOT_AVAILABLE                   -3
 #define CL_MEM_OBJECT_ALLOCATION_FAILURE            -4
@@ -109,22 +109,22 @@
 // end introduction
 
 // Custom OpenCL error code extentions for helper code return values. These extentions take up the positive space of the int32, since no other error codes (even other extentions) take up that space.
-#define CL_EXT_DLL_LOAD_FAILURE							1
-#define CL_EXT_DLL_FUNC_BIND_FAILURE					2
-//#define CL_EXT_DLL_FREE_FAILURE						3
-#define CL_EXT_NO_PLATFORMS_FOUND						4
-#define CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM				5
-#define CL_EXT_NO_DEVICES_FOUND							6
+#define CL_EXT_DLL_LOAD_FAILURE 			1
+#define CL_EXT_DLL_FUNC_BIND_FAILURE			2
+//#define CL_EXT_DLL_FREE_FAILURE			3
+#define CL_EXT_NO_PLATFORMS_FOUND			4
+#define CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM		5
+#define CL_EXT_NO_DEVICES_FOUND				6
 
-#define CL_EXT_FILE_OPEN_FAILED							7
+#define CL_EXT_FILE_OPEN_FAILED				7
 
-#define CL_EXT_CREATE_PROGRAM_FAILED					8
-#define CL_EXT_INSUFFICIENT_HOST_MEM					9
-#define CL_EXT_GET_BUILD_LOG_FAILED						10
-#define CL_EXT_BUILD_FAILED_WITH_BUILD_LOG				11
-#define CL_EXT_BUILD_FAILED_WITHOUT_BUILD_LOG			12
-#define CL_EXT_CREATE_KERNEL_FAILED						13
-#define CL_EXT_GET_KERNEL_WORK_GROUP_INFO_FAILED		14
+#define CL_EXT_CREATE_PROGRAM_FAILED			8
+#define CL_EXT_INSUFFICIENT_HOST_MEM			9
+#define CL_EXT_GET_BUILD_LOG_FAILED			10
+#define CL_EXT_BUILD_FAILED_WITH_BUILD_LOG		11
+#define CL_EXT_BUILD_FAILED_WITHOUT_BUILD_LOG		12
+#define CL_EXT_CREATE_KERNEL_FAILED			13
+#define CL_EXT_GET_KERNEL_WORK_GROUP_INFO_FAILED	14
 
 /* cl_bool */
 #define CL_FALSE                                    0
@@ -391,7 +391,7 @@
 typedef int32_t cl_int;
 typedef uint32_t cl_uint;
 typedef uint64_t cl_ulong;
-typedef cl_uint cl_bool;										// WARNING: For some reason, this is not guaranteed to be the same size as bools in the kernel. Kernel bools can have variable sizes depending on platform I guess.
+typedef cl_uint cl_bool;		// WARNING: For some reason, this is not guaranteed to be the same size as bools in the kernel. Kernel bools can have variable sizes depending on platform I guess.
 typedef cl_ulong cl_bitfield;
 
 // Platforms
@@ -657,7 +657,7 @@ struct VersionIdentifier {
 
 	constexpr VersionIdentifier(uint16_t major, uint16_t minor) noexcept : major(major), minor(minor) { }
 
-	constexpr bool operator>=(const VersionIdentifier& rightSide) noexcept {
+	constexpr bool operator>=(const VersionIdentifier& rightSide) const noexcept {
 		if (major > rightSide.major) { return true; }
 		if (major < rightSide.major) { return false; }
 		if (minor > rightSide.minor) { return true; }
