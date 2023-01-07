@@ -102,6 +102,7 @@ uint16_t convertStringToUInt16(const char* string) {
 // NOTE: Assumes the version string is always valid and has at least one number character for both the major and the minor versions. Also obviously assumes the string is null-terminated.
 VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* string) {
 	for (int i = CL_EXT_VERSION_STRING_PREFIX_LENGTH; ; i++) {
+		// TODO: Make these functions way more resilient. This doesn't handle the space at the end of the version string correctly for example.
 		if (string[i] == '.') { return VersionIdentifier(convertStringToUInt16(string + CL_EXT_VERSION_STRING_PREFIX_LENGTH, i - CL_EXT_VERSION_STRING_PREFIX_LENGTH), convertStringToUInt16(string + i + 1)); }
 		if (string[i] == '\0') { return VersionIdentifier(-1, -1); }			// This shouldn't happen given the requirements above, but I feel better knowing it's here.
 	}
@@ -405,7 +406,7 @@ cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatfor
 	// NOTE: The above code only returns the platform if you explicitly specified the platform in clCreateContext(),
 	// which we did not and will not. Instead, let's do it like this:
 
-	err = clGetDeviceInfo(bestDevice, CL_DEVICE_PLATFORM, sizeof(cl_platform_id), &bestDevice, nullptr);
+	err = clGetDeviceInfo(bestDevice, CL_DEVICE_PLATFORM, sizeof(cl_platform_id), &bestPlatform, nullptr);
 	if (err != CL_SUCCESS) { return err; }
 
 	return CL_SUCCESS;
