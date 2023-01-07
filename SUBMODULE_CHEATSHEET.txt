@@ -1,3 +1,5 @@
+TODO: Replace other instances of this file in fractal repo with this instance, since this is the more updated version.
+
 Adding a submodule to your project:
 
 	git submodule add <URL> [path of the folder where it should be located]
