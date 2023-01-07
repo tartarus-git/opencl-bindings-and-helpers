@@ -41,13 +41,26 @@ Getting upstream changes from remote in the submodules:
 	From your master repo, just run git submodule update --remote (you might also need --recursive but I don't know, probably though)
 
 
-// NOTE: The difference between specifying --remote and not doing so is this (I think):
-	- --remote will get changes from the remote and apply them to your submodules.
+// NOTE: The difference between specifying --remote and not doing so is this:
+	- --remote will get changes from the remote and apply them to your submodules. This will happen even if your submodule is already at the requested commit. It will get all the new changes from
+		upstream and it'll add the commit to the submodule. It won't update the master branch position in the submodule (although I think there's a setting or something you can do to make this
+		happen, it's not super important, you can just do it manually though).
 
-	- not doing so will basically ask the master repo which commit of the submodule is associated with the master repos current state (because it keeps track of
-		that), and if the submodule commit is outdated, it'll then fetch new data from the remote.
+	- not using --remote will basically ask the master repo which commit of the submodule is associated with the master repos current state (because it keeps track of
+		that), and if the submodule commit is outdated, it'll then fetch new data from the remote. But ONLY if it's outdated.
 
-	(--remote will of course also update the commit that the master repo associates with it's current state, so that nothing breaks.)
+	- Also, using just the normal git submodule update will also scroll the submodule commit back in the commit history if it's on a commit that's too new. BUT only if it's actually on a commit,
+		if it's got un-committed changes, it won't do anything AFAIK.
+	IMPORTANT: Even if scrolling back the commit makes the current commit unrecoverable (in reality it's still there, you could find it in the reflog and go to it as long as git hasn't
+		garbage collected yet), this will still scroll back the commit, so be careful. You should have your newest commit backed up to github before doing this.
+
+	- ALSO, doing git submodule update -f will force the submodules (or a specific submodule) to update to the commit that they are registered as in the main repo, even if they have
+		uncommitted changes.
+
+	IMPORTANT: If you use git submodule update --remote, you'll have to commit the fact that the submodule has new commits to your master repo. Or you can git submodule update and the submodule
+		will be reverted back to the commit that your master repo expects, as explained above.
+
+	git submodule update --remote is basically like git pulling from inside your submodule.
 
 
 
