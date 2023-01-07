@@ -64,6 +64,18 @@ Getting upstream changes from remote in the submodules:
 
 
 
+IMPORTANT: The remote for a submodule:
+	- In my opinion, the best way to specify the submodule URL is with a normal https absolute URL to it's repo.
+	- This is great because it doesn't require any ssh keys to pull from and everyone whos recursively cloning the repo will get it with no issues.
+	- IMPORTANT: It makes it a pain to push to origin though, because the URL requires a password or the git token management software thing.
+	- The way to fix this is:
+		--> just add a simple script in your submodule that executes the following:
+			git remote set-url origin git@github.com:tartarus-git/repo.git
+		--> This won't actually affect the submodules real URL, only the temporary origin URL that your copy of the submodule uses.
+		--> This way, you can push changes to the submodule source repo easily, and when you push the master repo and other people pull it again, they will still have the URL origin source in the submodule.
+
+
+
 Pulling master repo changes and submodule changes:
 
 	git pull <-- will get changes and merge them, but it will only GET submodule changes. That means they will be recorded and they will be there, but they won't
