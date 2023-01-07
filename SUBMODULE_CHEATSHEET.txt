@@ -21,7 +21,12 @@ It's a bit strange, but you gotta remember that.
 If you forget to do that and/or you've got a project that's already there but with the submodule hulls, no issue, just do this:
 
 	git submodule init <-- I think this takes the data stored in the .gitsubmodules file and puts it in your master .git/config file so that your master project knows about the submodules.
-				It's very weird that the project doesn't just clone with the .git/config stuff inside but whatever.
+				This makes some amount of sense since some users want to clone the repo, init the submodule in the config file in .git folder, but then
+				change the URL to something else, for whatever reason, before actually updating the submodule.
+
+		TODO: It totally works (and is the better route IMO) to just set the remote URL inside the submodule, which stays in your session and doesn't get pushed or anything.
+			This doesn't even touch the .git/config file and does exactly what one wants it to. Why have init be an extra step then?
+			Maybe there are some weird edge cases that are important for some people.
 
 	THEN
 
@@ -30,6 +35,7 @@ If you forget to do that and/or you've got a project that's already there but wi
 	ALTERNATIVELY
 
 	just do git submodule update --init <-- combines both steps, it doesn't init again if it happens to already be initialized, so don't worry about that.
+			--> This is for when you don't need init as an extra step, because you don't plan to mess with the URL or anything.
 	
 	ALSO: do git submodule update --init --recursive to go through all submodules, even submodules of submodules.
 
