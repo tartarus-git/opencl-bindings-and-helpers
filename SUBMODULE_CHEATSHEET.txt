@@ -13,7 +13,8 @@ THAT'S ALL YOU NEED TO DO IF YOUR ADDING SUBMODULES TO AN EXISTING PROJECT.
 Cloning a project with submodules:
 
 When you clone, you don't get the submodules, you get hulls for those submodules, but their files aren't filled in.
-Use --recurse-submodules on git clone and problem solved. You've got this in your config so you don't even need to worry about this.
+Use --recurse-submodules on git clone and problem solved. IMPORTANT: This is still necessary, even if you've got submodule.recurse set to true in your config.
+It's a bit strange, but you gotta remember that.
 
 If you forget to do that and/or you've got a project that's already there but with the submodule hulls, no issue, just do this:
 
