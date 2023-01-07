@@ -3,6 +3,12 @@
 #include <cstdint>                                                                                  // Used for fixed-width types.
 #include <string>																					// Used for access to std::string.
 
+#include <new>																						// for non-throwing new operator.
+
+#include <algorithm>																				// for std::copy() and std::sort()
+
+#include <cstdlib>
+
 // NOTE: These almost definitely only work in Windows, so if you ever want to port this to another system, these definitely need to change.
 #define CL_API_CALL _stdcall                                                                        // Calling covention for the OpenCL API calls.
 #define CL_CALLBACK _stdcall																		// Calling convention for the OpenCL callback functions.
@@ -19,7 +25,7 @@
 // NOTE: it gives you, I'm going to comment which features were introduced in which version. Uncommented features have been there since the beginning and are super
 // NOTE: safe to use.
 
-#define CL_EXT_VERSION_STRING_PREFIX_LENGTH 10			// TODO: Put in actual number.
+#define CL_EXT_VERSION_STRING_PREFIX_LENGTH (sizeof("OpenCL ") - 1)
 
 // NOTE: Floats in OpenCL are always 32-bit as far as I can tell by looking at the docs, so don't worry about other sizes.
 #define CL_EXT_FLOAT_SIZE 4
@@ -103,17 +109,26 @@
 // end introduction
 
 // Custom OpenCL error code extentions for helper code return values. These extentions take up the positive space of the int32, since no other error codes (even other extentions) take up that space.
-#define CL_EXT_INIT_FAILURE								1
-#define CL_EXT_FREE_FAILURE								2
-#define CL_EXT_NO_PLATFORMS_FOUND						3
-#define CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM				4
-#define CL_EXT_NO_DEVICES_FOUND							5
+#define CL_EXT_DLL_LOAD_FAILURE							1
+#define CL_EXT_DLL_FUNC_BIND_FAILURE					2
+//#define CL_EXT_DLL_FREE_FAILURE						3
+#define CL_EXT_NO_PLATFORMS_FOUND						4
+#define CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM				5
+#define CL_EXT_NO_DEVICES_FOUND							6
 
-#define CL_EXT_FILE_OPEN_FAILED							6
+#define CL_EXT_FILE_OPEN_FAILED							7
 
-#define CL_EXT_BUILD_FAILED_WITH_BUILD_LOG				7
+#define CL_EXT_CREATE_PROGRAM_FAILED					8
+#define CL_EXT_INSUFFICIENT_HOST_MEM					9
+#define CL_EXT_GET_BUILD_LOG_FAILED						10
+#define CL_EXT_BUILD_FAILED_WITH_BUILD_LOG				11
+#define CL_EXT_BUILD_FAILED_WITHOUT_BUILD_LOG			12
+#define CL_EXT_CREATE_KERNEL_FAILED						13
+#define CL_EXT_GET_KERNEL_WORK_GROUP_INFO_FAILED		14
 
-#define CL_EXT_INSUFFICIENT_HOST_MEM					8
+/* cl_bool */
+#define CL_FALSE                                    0
+#define CL_TRUE                                     1
 
 /* cl_platform_info */
 #define CL_PLATFORM_PROFILE                         0x0900
@@ -266,6 +281,20 @@
 #define CL_DEVICE_LATEST_CONFORMANCE_VERSION_PASSED      0x1072
 // end introduction
 
+/* cl_context_info */
+#define CL_CONTEXT_REFERENCE_COUNT                  0x1080
+#define CL_CONTEXT_DEVICES                          0x1081
+#define CL_CONTEXT_PROPERTIES                       0x1082
+// introduced in version 1.1
+#define CL_CONTEXT_NUM_DEVICES                      0x1083
+// end introduction
+
+/* cl_context_properties */
+#define CL_CONTEXT_PLATFORM                         0x1084
+// introduced in version 1.2
+#define CL_CONTEXT_INTEROP_USER_SYNC                0x1085
+// end introduction
+
 /* cl_mem_flags and cl_svm_mem_flags - bitfield */
 #define CL_MEM_READ_WRITE                           (1 << 0)
 #define CL_MEM_WRITE_ONLY                           (1 << 1)
@@ -377,6 +406,7 @@ typedef cl_uint cl_device_info;
 // Contexts
 typedef struct _cl_context* cl_context;
 typedef intptr_t cl_context_properties;
+typedef cl_uint cl_context_info;
 
 // Command queues
 typedef struct _cl_command_queue* cl_command_queue;
@@ -445,6 +475,14 @@ typedef cl_context (CL_API_CALL* clCreateContext_func)(const cl_context_properti
 													   cl_int* errcode_ret);
 // Creates an OpenCL context. I assume this holds data which is useful for later functions. It would make sense if they work on the context like a state machine.
 inline clCreateContext_func clCreateContext;
+
+typedef cl_int (CL_API_CALL* clGetContextInfo_func)(cl_context context,	
+													cl_context_info param_name, 
+													size_t param_value_size, 
+													void* param_value, 
+													size_t* param_value_size_ret);
+// Gets context info for a specific context.
+inline clGetContextInfo_func clGetContextInfo;
 
 typedef cl_command_queue (CL_API_CALL* clCreateCommandQueue_func)(cl_context context, 
 																  cl_device_id device, 
@@ -532,8 +570,12 @@ typedef cl_int (CL_API_CALL* clEnqueueNDRangeKernel_func)(cl_command_queue comma
 // Enqueues a kernel on the command queue. There is no way to make this synchronous, you just have to use clFinish afterwards if you want to wait until it finishes.
 inline clEnqueueNDRangeKernel_func clEnqueueNDRangeKernel;
 
+typedef cl_int (CL_API_CALL* clFlush_func)(cl_command_queue command_queue);
+// Flushes the command queue. That is to say it dispatches all the queued tasks.
+inline clFlush_func clFlush;
+
 typedef cl_int (CL_API_CALL* clFinish_func)(cl_command_queue command_queue);
-// Waits for every entry in the command queue to finish. You can use this to synchronize OpenCL tasks with your own tasks.
+// Waits for every entry in the command queue to finish (implicitly flushes before waiting). You can use this to synchronize OpenCL tasks with your own tasks.
 inline clFinish_func clFinish;
 
 typedef cl_int (CL_API_CALL* clEnqueueWriteBuffer_func)(cl_command_queue command_queue, 
@@ -563,8 +605,8 @@ inline clEnqueueReadBuffer_func clEnqueueReadBuffer;
 typedef cl_int (CL_API_CALL* clEnqueueWriteImage_func)(cl_command_queue command_queue, 
 													   cl_mem image, 
 													   cl_bool blocking_write, 
-													   const size_t* origin, 
-													   const size_t* region, 
+													   const size_t origin[3], 
+													   const size_t region[3], 
 													   size_t input_row_pitch, 
 													   size_t input_slice_pitch, 
 													   const void* ptr, 
@@ -577,8 +619,8 @@ inline clEnqueueWriteImage_func clEnqueueWriteImage;
 typedef cl_int (CL_API_CALL* clEnqueueReadImage_func)(cl_command_queue command_queue, 
 													  cl_mem image, 
 													  cl_bool blocking_read, 
-													  const size_t* origin, 
-													  const size_t* region, 
+													  const size_t origin[3], 
+													  const size_t region[3], 
 													  size_t row_pitch, 
 													  size_t slice_pitch, 
 													  void* ptr, 
@@ -613,10 +655,395 @@ struct VersionIdentifier {
 	uint16_t major;
 	uint16_t minor;
 
-	VersionIdentifier(uint16_t major, uint16_t minor);
+	constexpr VersionIdentifier(uint16_t major, uint16_t minor) noexcept : major(major), minor(minor) { }
 
-	bool operator>=(const VersionIdentifier& rightSide);
+	constexpr bool operator>=(const VersionIdentifier& rightSide) noexcept {
+		if (major > rightSide.major) { return true; }
+		if (major < rightSide.major) { return false; }
+		if (minor > rightSide.minor) { return true; }
+		if (minor < rightSide.minor) { return false; }
+		return true;
+	}
 };
+
+class OpenCLDeviceIndexCollection;
+
+enum class OpenCLDeviceCollection_state : uint8_t {
+	RELEASED,
+	INITIALIZED,
+	CORRUPTED
+};
+
+class OpenCLDeviceCollection {
+public:
+	cl_context* contexts = nullptr;
+	size_t* contextEndIndices = nullptr;
+	size_t contexts_length;
+	cl_device_id* devices = nullptr;
+	size_t devices_length;
+
+	constexpr OpenCLDeviceCollection() noexcept : devices_length(0), contexts_length(0) { }
+
+	constexpr OpenCLDeviceCollection(cl_int& err, size_t contexts_length, size_t devices_length) noexcept : devices_length(devices_length), contexts_length(contexts_length) {
+		devices = new (std::nothrow) cl_device_id[devices_length];
+		if (!devices) { err = CL_EXT_INSUFFICIENT_HOST_MEM; return; }
+
+		contexts = new (std::nothrow) cl_context[contexts_length];
+		if (!contexts) {
+			delete[] devices;
+			devices = nullptr;
+			err = CL_EXT_INSUFFICIENT_HOST_MEM;
+			return;
+		}
+
+		contextEndIndices = new (std::nothrow) size_t[contexts_length];
+		if (!contextEndIndices) {
+			delete[] contexts;
+			contexts = nullptr;
+			delete[] devices;
+			devices = nullptr;
+			err = CL_EXT_INSUFFICIENT_HOST_MEM;
+			return;
+		}
+
+		err = CL_SUCCESS;
+	}
+
+	OpenCLDeviceCollection& operator=(const OpenCLDeviceCollection& right) = delete;
+	// Move assignment operator is deleted automatically if copy assignment operator is deleted.
+	// So is move constructor and the copy constructor.
+	// NOTE: My way of thinking about it is that the move functions never existed to begin with, they just defaulted to the copy functions.
+	// Now that those are deleted, there's nothing to default to and therefor you cannot move either.
+
+	// NOTE: BUT we actually do need a move constructor so that one can return this class from a function.
+	constexpr OpenCLDeviceCollection(OpenCLDeviceCollection&& other) noexcept : devices_length(other.devices_length), contexts_length(other.contexts_length) {
+		devices = other.devices; other.devices = nullptr;
+		contexts = other.contexts; other.contexts = nullptr;
+		contextEndIndices = other.contextEndIndices; other.contextEndIndices = nullptr;
+	}
+
+	constexpr OpenCLDeviceCollection_state get_state() const noexcept {
+		uint8_t initialized_sum = (bool)contexts + (bool)contextEndIndices + (bool)devices;
+		switch (initialized_sum) {
+		case 0: return OpenCLDeviceCollection_state::RELEASED;
+		case 3: return OpenCLDeviceCollection_state::INITIALIZED;
+		default: return OpenCLDeviceCollection_state::CORRUPTED;
+		}
+	}
+
+	constexpr void swap(OpenCLDeviceCollection& other) noexcept {
+		cl_context* temp_contexts = contexts;
+		contexts = other.contexts;
+		other.contexts = temp_contexts;
+
+		size_t* temp_contextEndIndices = contextEndIndices;
+		contextEndIndices = other.contextEndIndices;
+		other.contextEndIndices = temp_contextEndIndices;
+
+		size_t temp_contexts_length = contexts_length;
+		contexts_length = other.contexts_length;
+		other.contexts_length = temp_contexts_length;
+
+		cl_device_id* temp_devices = devices;
+		devices = other.devices;
+		other.devices = temp_devices;
+
+		size_t temp_devices_length = devices_length;
+		devices_length = other.devices_length;
+		other.devices_length = temp_devices_length;
+	}
+
+	OpenCLDeviceIndexCollection createDeviceIndexCollection(cl_int& err) const noexcept;
+
+	constexpr cl_device_id& operator[](size_t index) noexcept { return devices[index]; }
+	constexpr const cl_device_id& operator[](size_t index) const noexcept { return devices[index]; }
+
+	// NOTE: If you give this something that is out-of-bounds, it will die a painful, unsafe, segfaulty death.
+	constexpr size_t getContextIndexForDeviceIndex(size_t deviceIndex) const noexcept {
+		size_t startIndex = 0;
+		size_t endIndex = contexts_length;
+		while (true) {
+			size_t middle = (startIndex + endIndex) / 2;
+			if (deviceIndex < contextEndIndices[middle]) {
+				if (middle == 0) { return 0; }
+				if (deviceIndex >= contextEndIndices[middle - 1]) { return middle; }
+				endIndex = middle;
+				continue;
+			}
+			if (deviceIndex >= contextEndIndices[middle]) {
+				startIndex = middle + 1;
+				continue;
+			}
+		}
+	}
+
+	constexpr cl_context& getContextForDeviceIndex(size_t deviceIndex) noexcept {
+		return contexts[getContextIndexForDeviceIndex(deviceIndex)];
+	}
+
+	constexpr const cl_context& getContextForDeviceIndex(size_t deviceIndex) const noexcept {
+		return contexts[getContextIndexForDeviceIndex(deviceIndex)];
+	}
+
+	constexpr ~OpenCLDeviceCollection() noexcept {
+		delete[] contextEndIndices;		// NOTE: Doesn't do anything if the pointers are nullptr, don't worry.
+		delete[] contexts;
+		delete[] devices;
+	}
+};
+
+template <typename element_t>
+class custom_vector {
+public:
+	element_t* data;
+	size_t capacity;
+	size_t length = 0;
+
+	custom_vector(cl_int& err) noexcept : capacity(128) {
+		data = (element_t*)malloc(capacity * sizeof(element_t));
+		if (!data) { err = CL_EXT_INSUFFICIENT_HOST_MEM; return; }
+
+		err = CL_SUCCESS;
+	}
+
+	cl_int resize(size_t new_length) noexcept {
+		/*
+		* If new_length is smaller than capacity, this function will essentially set length to new_length and then do a shrink_to_fit.
+		* If new_length is the same as capacity, we still call realloc because I assume that the cost isn't high when calling it with
+		* values that are lower than or equal to the existing allocation's size, since then it doesn't have to move the allocation in memory.
+		* Basically I don't want to waste processing time with an if statement that checks whether new_length == capacity, because why should I? I shouldn't.
+		* We would be avoiding the realloc in that case, but we've just covered that it would be super fast anyway, so the reward doesn't outweigh the cost.
+		*/
+
+		element_t* new_data = (element_t*)realloc(data, new_length * sizeof(element_t));
+		if (!new_data) { return CL_EXT_INSUFFICIENT_HOST_MEM; }
+
+		data = new_data;
+		length = new_length;
+		capacity = length;
+
+		return CL_SUCCESS;
+	}
+
+	cl_int increase_space(size_t addition) noexcept {
+		size_t new_capacity = capacity + addition;
+		element_t* new_data = (element_t*)realloc(data, new_capacity * sizeof(element_t));
+		if (!new_data) { return CL_EXT_INSUFFICIENT_HOST_MEM; }
+
+		data = new_data;
+		capacity = new_capacity;
+
+		return CL_SUCCESS;
+	}
+
+	cl_int increase_space() noexcept { return increase_space(128); }
+
+	constexpr cl_int push_back(const element_t& element) noexcept {
+		if (length == capacity) {
+			cl_int err = increase_space();
+			if (err != CL_SUCCESS) { return err; }
+		}
+
+		data[length++] = element;
+
+		return CL_SUCCESS;
+	}
+
+	constexpr cl_int push_empty_back(size_t addition_length) noexcept {
+		size_t new_length = length + addition_length;
+
+		if (new_length <= capacity) { length = new_length; return CL_SUCCESS; }
+
+		size_t difference = new_length - capacity;
+		size_t aligned_difference = 128 - (difference - 1) % 128 - 1 + difference;			// TODO: Replace other, weirder aligning code somewhere in the codebase with this version, this one looks nice.
+
+		cl_int err = increase_space(aligned_difference);
+		if (err != CL_SUCCESS) { return err; }
+
+		length = new_length;
+
+		return CL_SUCCESS;
+	}
+
+	cl_int shrink_to_fit() noexcept {
+		element_t* new_data = (element_t*)realloc(data, length * sizeof(element_t));
+		if (!new_data) { return CL_EXT_INSUFFICIENT_HOST_MEM; }
+
+		data = new_data;
+		capacity = length;
+
+		return CL_SUCCESS;
+	}
+
+	element_t* steal_data(cl_int& err) noexcept {
+		err = shrink_to_fit();
+		if (err != CL_SUCCESS) { return nullptr; }
+
+		element_t* temp_data = data;
+		data = nullptr;
+
+		err = CL_SUCCESS;
+		return temp_data;
+	}
+
+	~custom_vector() noexcept {
+		free(data);					// NOTE: Doesn't do anything if data is nullptr.
+	}
+};
+
+class OpenCLDeviceComparators {
+public:
+	static constexpr bool increasing_max_work_group_size(cl_int& err, const OpenCLDeviceCollection* data, const size_t& left, const size_t& right) noexcept {
+		if (err != CL_SUCCESS) { return false; }
+
+		size_t left_max_work_group_size;
+		err = clGetDeviceInfo((*data)[left], CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(size_t), &left_max_work_group_size, nullptr);
+		if (err != CL_SUCCESS) { return false; }
+
+		size_t right_max_work_group_size;
+		err = clGetDeviceInfo((*data)[right], CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(size_t), &right_max_work_group_size, nullptr);
+		if (err != CL_SUCCESS) { return false; }
+
+		err = CL_SUCCESS;
+		return left_max_work_group_size < right_max_work_group_size;
+	}
+};
+
+class OpenCLDeviceIndexCollection {
+	const OpenCLDeviceCollection* data;
+
+public:
+	size_t* indices = nullptr;
+	size_t length;
+
+	constexpr OpenCLDeviceIndexCollection() noexcept = default;
+
+	constexpr OpenCLDeviceIndexCollection(cl_int& err, const OpenCLDeviceCollection* data) noexcept : 
+		data(data), length(data->devices_length)
+	{
+		indices = new (std::nothrow) size_t[length];
+		if (!indices) { err = CL_EXT_INSUFFICIENT_HOST_MEM; return; }
+
+		for (size_t i = 0; i < length; i++) { indices[i] = i; }
+
+		err = CL_SUCCESS;
+	}
+
+	constexpr OpenCLDeviceIndexCollection(cl_int& err, const OpenCLDeviceIndexCollection& right) noexcept : 
+		data(right.data), length(right.length)
+	{
+		indices = new (std::nothrow) size_t[length];
+		if (!indices) { err = CL_EXT_INSUFFICIENT_HOST_MEM; return; }
+
+		std::copy(right.indices, right.indices + length, indices);
+
+		err = CL_SUCCESS;
+	}
+
+	constexpr OpenCLDeviceIndexCollection(OpenCLDeviceIndexCollection&& right) noexcept : 
+		data(right.data), indices(right.indices), length(right.length)
+	{
+		right.indices = nullptr;
+	}
+
+	OpenCLDeviceIndexCollection& operator=(const OpenCLDeviceIndexCollection& right) = delete;
+	// NOTE: Move assignment operator is deleted automatically if copy assignment operator is deleted.
+
+	constexpr void swap(OpenCLDeviceIndexCollection& other) noexcept {
+		const OpenCLDeviceCollection* temp_data = data;
+		data = other.data;
+		other.data = temp_data;
+
+		size_t* temp_indices = indices;
+		indices = other.indices;
+		other.indices = temp_indices;
+
+		size_t temp_length = length;
+		length = other.length;
+		other.length = temp_length;
+	}
+
+	constexpr size_t& operator[](size_t index) noexcept { return indices[index]; }
+	constexpr const size_t& operator[](size_t index) const noexcept { return indices[index]; }
+
+	template <typename comparator_functor_t>
+	constexpr OpenCLDeviceIndexCollection sort(cl_int& err, comparator_functor_t comparator) const noexcept {
+		OpenCLDeviceIndexCollection result(err, *this);
+		if (err != CL_SUCCESS) { return result; }
+
+		std::sort(result.indices, result.indices + result.length, comparator);
+
+		err = CL_SUCCESS;
+		return result;
+	}
+
+	constexpr OpenCLDeviceIndexCollection sort_by_increasing_max_work_group_size(cl_int& err) const noexcept {
+		// NOTE: You can't capture member variables with &data or data, I assume since using them from the lambda body is weird.
+		// Like how would you refer to them from the lambda body? this->data? Doesn't work since you haven't captured this.
+		// Simply data? That's weird since only things inside of classes can refer to the member variables like that.
+		// NOTE: The correct ways to do this are 1. to capture the whole class with this (by ref) or *this (by copy) or & (NOT =,
+		// implicit copy capture of this isn't allowed, which is weird, maybe it's because *this is often big?).
+		// OR 2. like I've done below or like this: data = data.
+
+		// 1. allows access through this->data and simply data. I know that all this behaviour doesn't make a lot of sense. Maybe
+		// it was simply easier to implement this way?
+		// 2. allows access through just simply data, since it creates a reference/copy to/of data and captures that instead of
+		// directly trying to capture the member variable.
+		auto comparator_lambda = [&err, &data = data](const size_t& left, const size_t& right) noexcept {
+			return OpenCLDeviceComparators::increasing_max_work_group_size(err, data, left, right);
+		};
+
+		err = CL_SUCCESS;			// NOTE: Don't remove, it's necessary.
+
+		cl_int sort_err;
+		OpenCLDeviceIndexCollection result = sort(sort_err, comparator_lambda);
+		if (sort_err != CL_SUCCESS) { err = sort_err; return result; }
+
+		return result;
+	}
+
+	template <typename checker_functor_t>
+	OpenCLDeviceIndexCollection removeInvalidDevices(cl_int& err, checker_functor_t checker) const noexcept {
+		OpenCLDeviceIndexCollection result;
+
+		custom_vector<size_t> new_indices;
+		for (size_t i = 0; i < length; i++) {
+			if (checker(indices[i])) { new_indices.push_back(indices[i]); }
+		}
+
+		result.data = data;
+		result.length = new_indices.length;				// NOTE: It's important that this is above the next line.
+		result.indices = new_indices.steal_data();		// NOTE: Since after this line the state of new_indices is pretty undefined.
+
+		err = CL_SUCCESS;
+		return result;
+	}
+
+	constexpr OpenCLDeviceIndexCollection reverse(cl_int& err) const noexcept {
+		OpenCLDeviceIndexCollection result;
+		result.indices = new (std::nothrow) size_t[length];
+		if (!result.indices) { err = CL_EXT_INSUFFICIENT_HOST_MEM; return result; }
+		result.length = length;
+		result.data = data;
+
+		for (size_t i = 0; i < length; i++) {
+			result.indices[i] = indices[length - 1 - i];
+		}
+
+		err = CL_SUCCESS;
+		return result;
+	}
+
+	constexpr ~OpenCLDeviceIndexCollection() noexcept {
+		delete[] indices;		// NOTE: Don't worry, doesn't do anything if it's nullptr.
+	}
+};
+
+inline OpenCLDeviceIndexCollection OpenCLDeviceCollection::createDeviceIndexCollection(cl_int& err) const noexcept {
+	return OpenCLDeviceIndexCollection(err, this);
+}
+
+bool loadOpenCLLib() noexcept;
 
 // Bind a specific DLL function to it's corresponding function pointer. Splitting these up into separate functions is useful in case the user wants to bind these in a lazy fashion.
 bool bind_clGetPlatformIDs();
@@ -624,6 +1051,7 @@ bool bind_clGetPlatformInfo();
 bool bind_clGetDeviceIDs();
 bool bind_clGetDeviceInfo();
 bool bind_clCreateContext();
+bool bind_clGetContextInfo();
 bool bind_clCreateCommandQueue();
 bool bind_clCreateProgramWithSource();
 bool bind_clBuildProgram();
@@ -645,14 +1073,16 @@ bool bind_clReleaseProgram();
 bool bind_clReleaseCommandQueue();
 bool bind_clReleaseContext();
 
-bool loadOpenCLLib();
-
 // Simple helper function which initializes the dynamic linkage to the OpenCL DLL and initializes the bindings to all of the various functions.
-cl_int initOpenCLBindings();
+cl_int initOpenCLBindings() noexcept;
 
-bool freeOpenCLLib();
+bool freeOpenCLLib() noexcept;
 
 VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* string);
+
+// TODO: Consider putting all this opencl stuff in a namespace to avoid collisions and messiness.
+
+OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier& minimumPlatformVersion);
 
 // Finds the most optimal device in the available list of devices on the system and initializes basic OpenCL variables based on that device.
 // NOTE: In case you want to only bind the functions that this function uses, it uses:
@@ -663,7 +1093,8 @@ VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* stri
 // clCreateContext
 // clCreateCommandQueue
 // clReleaseContext
-cl_int initOpenCLVarsForBestDevice(const char* targetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue);
+// TODO: Update the name of minPlatVers in the implementation as well.
+cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue);
 
 // Helper function to quickly set up a compute kernel.
 // NOTE: In case you want to only bind the functions that this function uses, it uses:
@@ -674,4 +1105,6 @@ cl_int initOpenCLVarsForBestDevice(const char* targetPlatformVersion, cl_platfor
 // clCreateKernel
 // clGetKernelWorkGroupInfo
 // clReleaseKernel
-cl_int setupComputeKernel(cl_context context, cl_device_id device, const char* sourceFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog);
+// TODO: Annotate these two functions properly.
+cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, const char* sourceCodeString, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog);
+cl_int setupComputeKernelFromFile(cl_context context, cl_device_id device, const char* sourceCodeFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog);
