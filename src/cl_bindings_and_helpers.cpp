@@ -1,12 +1,11 @@
 #include "cl_bindings_and_helpers.h"
 
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
 #include <cstdint>						// For fixed-width types.
 
 #include <new>							// For std::nothrow.
-
-#include <vector>
 
 #include <fstream>						// For reading OpenCL source code from file.
 

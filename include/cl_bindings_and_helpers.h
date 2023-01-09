@@ -3,11 +3,11 @@
 #include <cstdint>			// Used for fixed-width types.
 #include <string>			// Used for access to std::string.
 
-#include <new>				// for non-throwing new operator.
+#include <new>				// for non-throwing new operator
 
-#include <algorithm>			// for std::copy() and std::sort()
+#include <algorithm>		// for std::copy() and std::sort()
 
-#include <cstdlib>
+#include <cstdlib>			// for malloc, realloc and free
 
 // NOTE: These almost definitely only work in Windows, so if you ever want to port this to another system, these definitely need to change.
 #define CL_API_CALL _stdcall		// Calling covention for the OpenCL API calls.
@@ -712,14 +712,17 @@ public:
 	OpenCLDeviceCollection& operator=(const OpenCLDeviceCollection& right) = delete;
 	// Move assignment operator is deleted automatically if copy assignment operator is deleted.
 	// So is move constructor and the copy constructor.
-	// NOTE: My way of thinking about it is that the move functions never existed to begin with, they just defaulted to the copy functions.
+	// NOTE: My way of thinking about it is that the move functions never existed to begin with, overload resolution just defaulted to the copy functions.
 	// Now that those are deleted, there's nothing to default to and therefor you cannot move either.
 
 	// NOTE: BUT we actually do need a move constructor so that one can return this class from a function.
-	constexpr OpenCLDeviceCollection(OpenCLDeviceCollection&& other) noexcept : devices_length(other.devices_length), contexts_length(other.contexts_length) {
-		devices = other.devices; other.devices = nullptr;
-		contexts = other.contexts; other.contexts = nullptr;
-		contextEndIndices = other.contextEndIndices; other.contextEndIndices = nullptr;
+	constexpr OpenCLDeviceCollection(OpenCLDeviceCollection&& other) noexcept :
+		devices(other.devices), contexts(other.contexts), contextEndIndices(other.contextEndIndices), 
+		devices_length(other.devices_length), contexts_length(other.contexts_length) 
+	{
+		other.devices = nullptr;
+		other.contexts = nullptr;
+		other.contextEndIndices = nullptr;
 	}
 
 	constexpr OpenCLDeviceCollection_state get_state() const noexcept {
@@ -763,7 +766,9 @@ public:
 		size_t startIndex = 0;
 		size_t endIndex = contexts_length;
 		while (true) {
-			size_t middle = (startIndex + endIndex) / 2;
+			//size_t middle = (startIndex + endIndex) / 2;
+			size_t middle = (endIndex - startIndex) / 2 + startIndex;
+			// NOTE: The 1. version of the middle thing overflows when the numbers are high enough, so we use the 2. version.
 			if (deviceIndex < contextEndIndices[middle]) {
 				if (middle == 0) { return 0; }
 				if (deviceIndex >= contextEndIndices[middle - 1]) { return middle; }
@@ -792,6 +797,8 @@ public:
 	}
 };
 
+// TODO: You should probably remove this if you end up not using it in the implementation file. Put it somewhere
+// else for safe-keeping.
 template <typename element_t>
 class custom_vector {
 public:
@@ -940,6 +947,7 @@ public:
 		err = CL_SUCCESS;
 	}
 
+	// NOTE: Necessary (primarily) for returning from functions efficiently. Also useful for a couple other things.
 	constexpr OpenCLDeviceIndexCollection(OpenCLDeviceIndexCollection&& right) noexcept : 
 		data(right.data), indices(right.indices), length(right.length)
 	{
@@ -947,7 +955,9 @@ public:
 	}
 
 	OpenCLDeviceIndexCollection& operator=(const OpenCLDeviceIndexCollection& right) = delete;
-	// NOTE: Move assignment operator is deleted automatically if copy assignment operator is deleted.
+	// NOTE: Automatically also can't move-assign if copy assignment operator is deleted (unless specified otherwise), which is nice.
+	// NOTE: This also deletes the copy constructor, which is good because we don't want that.
+	// TODO: Figure out the deprecation thing from stackoverflow again.
 
 	constexpr void swap(OpenCLDeviceIndexCollection& other) noexcept {
 		const OpenCLDeviceCollection* temp_data = data;
@@ -1046,44 +1056,45 @@ inline OpenCLDeviceIndexCollection OpenCLDeviceCollection::createDeviceIndexColl
 bool loadOpenCLLib() noexcept;
 
 // Bind a specific DLL function to it's corresponding function pointer. Splitting these up into separate functions is useful in case the user wants to bind these in a lazy fashion.
-bool bind_clGetPlatformIDs();
-bool bind_clGetPlatformInfo();
-bool bind_clGetDeviceIDs();
-bool bind_clGetDeviceInfo();
-bool bind_clCreateContext();
-bool bind_clGetContextInfo();
-bool bind_clCreateCommandQueue();
-bool bind_clCreateProgramWithSource();
-bool bind_clBuildProgram();
-bool bind_clGetProgramBuildInfo();
-bool bind_clCreateKernel();
-bool bind_clCreateBuffer();
-bool bind_clCreateImage2D();
-bool bind_clSetKernelArg();
-bool bind_clGetKernelWorkGroupInfo();
-bool bind_clEnqueueNDRangeKernel();
-bool bind_clFinish();
-bool bind_clEnqueueWriteBuffer();
-bool bind_clEnqueueReadBuffer();
-bool bind_clEnqueueWriteImage();
-bool bind_clEnqueueReadImage();
-bool bind_clReleaseMemObject();
-bool bind_clReleaseKernel();
-bool bind_clReleaseProgram();
-bool bind_clReleaseCommandQueue();
-bool bind_clReleaseContext();
+bool bind_clGetPlatformIDs() noexcept;
+bool bind_clGetPlatformInfo() noexcept;
+bool bind_clGetDeviceIDs() noexcept;
+bool bind_clGetDeviceInfo() noexcept;
+bool bind_clCreateContext() noexcept;
+bool bind_clGetContextInfo() noexcept;
+bool bind_clCreateCommandQueue() noexcept;
+bool bind_clCreateProgramWithSource() noexcept;
+bool bind_clBuildProgram() noexcept;
+bool bind_clGetProgramBuildInfo() noexcept;
+bool bind_clCreateKernel() noexcept;
+bool bind_clCreateBuffer() noexcept;
+bool bind_clCreateImage2D() noexcept;
+bool bind_clSetKernelArg() noexcept;
+bool bind_clGetKernelWorkGroupInfo() noexcept;
+bool bind_clEnqueueNDRangeKernel() noexcept;
+bool bind_clFinish() noexcept;
+bool bind_clEnqueueWriteBuffer() noexcept;
+bool bind_clEnqueueReadBuffer() noexcept;
+bool bind_clEnqueueWriteImage() noexcept;
+bool bind_clEnqueueReadImage() noexcept;
+bool bind_clReleaseMemObject() noexcept;
+bool bind_clReleaseKernel() noexcept;
+bool bind_clReleaseProgram() noexcept;
+bool bind_clReleaseCommandQueue() noexcept;
+bool bind_clReleaseContext() noexcept;
 
 // Simple helper function which initializes the dynamic linkage to the OpenCL DLL and initializes the bindings to all of the various functions.
 cl_int initOpenCLBindings() noexcept;
 
 bool freeOpenCLLib() noexcept;
 
-VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* string);
+VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* string) noexcept;
 
 // TODO: Consider putting all this opencl stuff in a namespace to avoid collisions and messiness.
 
-OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier& minimumPlatformVersion);
+OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier& minimumPlatformVersion) noexcept;
 
+// TODO: Make sure these lists of functions are up-to-date.
 // Finds the most optimal device in the available list of devices on the system and initializes basic OpenCL variables based on that device.
 // NOTE: In case you want to only bind the functions that this function uses, it uses:
 // clGetPlatformIDs
@@ -1094,7 +1105,7 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 // clCreateCommandQueue
 // clReleaseContext
 // TODO: Update the name of minPlatVers in the implementation as well.
-cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue);
+cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) noexcept;
 
 // Helper function to quickly set up a compute kernel.
 // NOTE: In case you want to only bind the functions that this function uses, it uses:
@@ -1106,5 +1117,5 @@ cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumPlatformVersi
 // clGetKernelWorkGroupInfo
 // clReleaseKernel
 // TODO: Annotate these two functions properly.
-cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, const char* sourceCodeString, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog);
-cl_int setupComputeKernelFromFile(cl_context context, cl_device_id device, const char* sourceCodeFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog);
+cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, const char* sourceCodeString, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog) noexcept;
+cl_int setupComputeKernelFromFile(cl_context context, cl_device_id device, const char* sourceCodeFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog) noexcept;
