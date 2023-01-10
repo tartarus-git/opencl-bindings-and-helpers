@@ -630,6 +630,10 @@ typedef cl_int (CL_API_CALL* clEnqueueReadImage_func)(cl_command_queue command_q
 // Enqueues an image read on the command queue. You can set the blocking_read flag in order to wait for this function to finish without using clFinish.
 inline clEnqueueReadImage_func clEnqueueReadImage;
 
+// TODO: Think about noexcepting these function ptrs.
+// You can't really because you can't cast non-noexcept to noexcept function ptrs.
+// TODO: Find a way around that.
+
 typedef cl_int (CL_API_CALL* clReleaseMemObject_func)(cl_mem memobj);
 // Decrements a memory object's reference count.
 inline clReleaseMemObject_func clReleaseMemObject;
@@ -957,7 +961,7 @@ public:
 	OpenCLDeviceIndexCollection& operator=(const OpenCLDeviceIndexCollection& right) = delete;
 	// NOTE: Automatically also can't move-assign if copy assignment operator is deleted (unless specified otherwise), which is nice.
 	// NOTE: This also deletes the copy constructor, which is good because we don't want that.
-	// TODO: Figure out the deprecation thing from stackoverflow again.
+	// TODO: Figure out the deprecation thing from stackoverflow again!!!!!!!
 
 	constexpr void swap(OpenCLDeviceIndexCollection& other) noexcept {
 		const OpenCLDeviceCollection* temp_data = data;

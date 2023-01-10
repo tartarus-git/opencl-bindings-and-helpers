@@ -13,37 +13,39 @@
 
 #include <limits>						// for std::numeric_limits
 
+#include <utility>						// For std::pair.
+
 HMODULE DLLHandle;
 
 bool loadOpenCLLib() noexcept { return DLLHandle = LoadLibraryA("OpenCL.dll"); }
 
-bool bind_clGetPlatformIDs() { return clGetPlatformIDs = (clGetPlatformIDs_func)GetProcAddress(DLLHandle, "clGetPlatformIDs"); }
-bool bind_clGetPlatformInfo() { return clGetPlatformInfo = (clGetPlatformInfo_func)GetProcAddress(DLLHandle, "clGetPlatformInfo"); }
-bool bind_clGetDeviceIDs() { return clGetDeviceIDs = (clGetDeviceIDs_func)GetProcAddress(DLLHandle, "clGetDeviceIDs"); }
-bool bind_clGetDeviceInfo() { return clGetDeviceInfo = (clGetDeviceInfo_func)GetProcAddress(DLLHandle, "clGetDeviceInfo"); }
-bool bind_clCreateContext() { return clCreateContext = (clCreateContext_func)GetProcAddress(DLLHandle, "clCreateContext"); }
-bool bind_clGetContextInfo() { return clGetContextInfo = (clGetContextInfo_func)GetProcAddress(DLLHandle, "clGetContextInfo"); }
-bool bind_clCreateCommandQueue() { return clCreateCommandQueue = (clCreateCommandQueue_func)GetProcAddress(DLLHandle, "clCreateCommandQueue"); }
-bool bind_clCreateProgramWithSource() { return clCreateProgramWithSource = (clCreateProgramWithSource_func)GetProcAddress(DLLHandle, "clCreateProgramWithSource"); }
-bool bind_clBuildProgram() { return clBuildProgram = (clBuildProgram_func)GetProcAddress(DLLHandle, "clBuildProgram"); }
-bool bind_clGetProgramBuildInfo() { return clGetProgramBuildInfo = (clGetProgramBuildInfo_func)GetProcAddress(DLLHandle, "clGetProgramBuildInfo"); }
-bool bind_clCreateKernel() { return clCreateKernel = (clCreateKernel_func)GetProcAddress(DLLHandle, "clCreateKernel"); }
-bool bind_clCreateBuffer() { return clCreateBuffer = (clCreateBuffer_func)GetProcAddress(DLLHandle, "clCreateBuffer"); }
-bool bind_clCreateImage2D() { return clCreateImage2D = (clCreateImage2D_func)GetProcAddress(DLLHandle, "clCreateImage2D"); }
-bool bind_clSetKernelArg() { return clSetKernelArg = (clSetKernelArg_func)GetProcAddress(DLLHandle, "clSetKernelArg"); }
-bool bind_clGetKernelWorkGroupInfo() { return clGetKernelWorkGroupInfo = (clGetKernelWorkGroupInfo_func)GetProcAddress(DLLHandle, "clGetKernelWorkGroupInfo"); }
-bool bind_clEnqueueNDRangeKernel() { return clEnqueueNDRangeKernel = (clEnqueueNDRangeKernel_func)GetProcAddress(DLLHandle, "clEnqueueNDRangeKernel"); }
-bool bind_clFlush() { return clFlush = (clFlush_func)GetProcAddress(DLLHandle, "clFlush"); }
-bool bind_clFinish() { return clFinish = (clFinish_func)GetProcAddress(DLLHandle, "clFinish"); }
-bool bind_clEnqueueWriteBuffer() { return clEnqueueWriteBuffer = (clEnqueueWriteBuffer_func)GetProcAddress(DLLHandle, "clEnqueueWriteBuffer"); }
-bool bind_clEnqueueReadBuffer() { return clEnqueueReadBuffer = (clEnqueueReadBuffer_func)GetProcAddress(DLLHandle, "clEnqueueReadBuffer"); }
-bool bind_clEnqueueWriteImage() { return clEnqueueWriteImage = (clEnqueueWriteImage_func)GetProcAddress(DLLHandle, "clEnqueueWriteImage"); }
-bool bind_clEnqueueReadImage() { return clEnqueueReadImage = (clEnqueueReadImage_func)GetProcAddress(DLLHandle, "clEnqueueReadImage"); }
-bool bind_clReleaseMemObject() { return clReleaseMemObject = (clReleaseMemObject_func)GetProcAddress(DLLHandle, "clReleaseMemObject"); }
-bool bind_clReleaseKernel() { return clReleaseKernel = (clReleaseKernel_func)GetProcAddress(DLLHandle, "clReleaseKernel"); }
-bool bind_clReleaseProgram() { return clReleaseProgram = (clReleaseProgram_func)GetProcAddress(DLLHandle, "clReleaseProgram"); }
-bool bind_clReleaseCommandQueue() { return clReleaseCommandQueue = (clReleaseCommandQueue_func)GetProcAddress(DLLHandle, "clReleaseCommandQueue"); }
-bool bind_clReleaseContext() { return clReleaseContext = (clReleaseContext_func)GetProcAddress(DLLHandle, "clReleaseContext"); }
+bool bind_clGetPlatformIDs() noexcept { return clGetPlatformIDs = (clGetPlatformIDs_func)GetProcAddress(DLLHandle, "clGetPlatformIDs"); }
+bool bind_clGetPlatformInfo() noexcept { return clGetPlatformInfo = (clGetPlatformInfo_func)GetProcAddress(DLLHandle, "clGetPlatformInfo"); }
+bool bind_clGetDeviceIDs() noexcept { return clGetDeviceIDs = (clGetDeviceIDs_func)GetProcAddress(DLLHandle, "clGetDeviceIDs"); }
+bool bind_clGetDeviceInfo() noexcept { return clGetDeviceInfo = (clGetDeviceInfo_func)GetProcAddress(DLLHandle, "clGetDeviceInfo"); }
+bool bind_clCreateContext() noexcept { return clCreateContext = (clCreateContext_func)GetProcAddress(DLLHandle, "clCreateContext"); }
+bool bind_clGetContextInfo() noexcept { return clGetContextInfo = (clGetContextInfo_func)GetProcAddress(DLLHandle, "clGetContextInfo"); }
+bool bind_clCreateCommandQueue() noexcept { return clCreateCommandQueue = (clCreateCommandQueue_func)GetProcAddress(DLLHandle, "clCreateCommandQueue"); }
+bool bind_clCreateProgramWithSource() noexcept { return clCreateProgramWithSource = (clCreateProgramWithSource_func)GetProcAddress(DLLHandle, "clCreateProgramWithSource"); }
+bool bind_clBuildProgram() noexcept { return clBuildProgram = (clBuildProgram_func)GetProcAddress(DLLHandle, "clBuildProgram"); }
+bool bind_clGetProgramBuildInfo() noexcept { return clGetProgramBuildInfo = (clGetProgramBuildInfo_func)GetProcAddress(DLLHandle, "clGetProgramBuildInfo"); }
+bool bind_clCreateKernel() noexcept { return clCreateKernel = (clCreateKernel_func)GetProcAddress(DLLHandle, "clCreateKernel"); }
+bool bind_clCreateBuffer() noexcept { return clCreateBuffer = (clCreateBuffer_func)GetProcAddress(DLLHandle, "clCreateBuffer"); }
+bool bind_clCreateImage2D() noexcept { return clCreateImage2D = (clCreateImage2D_func)GetProcAddress(DLLHandle, "clCreateImage2D"); }
+bool bind_clSetKernelArg() noexcept { return clSetKernelArg = (clSetKernelArg_func)GetProcAddress(DLLHandle, "clSetKernelArg"); }
+bool bind_clGetKernelWorkGroupInfo() noexcept { return clGetKernelWorkGroupInfo = (clGetKernelWorkGroupInfo_func)GetProcAddress(DLLHandle, "clGetKernelWorkGroupInfo"); }
+bool bind_clEnqueueNDRangeKernel() noexcept { return clEnqueueNDRangeKernel = (clEnqueueNDRangeKernel_func)GetProcAddress(DLLHandle, "clEnqueueNDRangeKernel"); }
+bool bind_clFlush() noexcept { return clFlush = (clFlush_func)GetProcAddress(DLLHandle, "clFlush"); }
+bool bind_clFinish() noexcept { return clFinish = (clFinish_func)GetProcAddress(DLLHandle, "clFinish"); }
+bool bind_clEnqueueWriteBuffer() noexcept { return clEnqueueWriteBuffer = (clEnqueueWriteBuffer_func)GetProcAddress(DLLHandle, "clEnqueueWriteBuffer"); }
+bool bind_clEnqueueReadBuffer() noexcept { return clEnqueueReadBuffer = (clEnqueueReadBuffer_func)GetProcAddress(DLLHandle, "clEnqueueReadBuffer"); }
+bool bind_clEnqueueWriteImage() noexcept { return clEnqueueWriteImage = (clEnqueueWriteImage_func)GetProcAddress(DLLHandle, "clEnqueueWriteImage"); }
+bool bind_clEnqueueReadImage() noexcept { return clEnqueueReadImage = (clEnqueueReadImage_func)GetProcAddress(DLLHandle, "clEnqueueReadImage"); }
+bool bind_clReleaseMemObject() noexcept { return clReleaseMemObject = (clReleaseMemObject_func)GetProcAddress(DLLHandle, "clReleaseMemObject"); }
+bool bind_clReleaseKernel() noexcept { return clReleaseKernel = (clReleaseKernel_func)GetProcAddress(DLLHandle, "clReleaseKernel"); }
+bool bind_clReleaseProgram() noexcept { return clReleaseProgram = (clReleaseProgram_func)GetProcAddress(DLLHandle, "clReleaseProgram"); }
+bool bind_clReleaseCommandQueue() noexcept { return clReleaseCommandQueue = (clReleaseCommandQueue_func)GetProcAddress(DLLHandle, "clReleaseCommandQueue"); }
+bool bind_clReleaseContext() noexcept { return clReleaseContext = (clReleaseContext_func)GetProcAddress(DLLHandle, "clReleaseContext"); }
 
 #define CHECK_FUNC_VALIDITY(func) if (!(func)) { FreeLibrary(DLLHandle); return CL_EXT_DLL_FUNC_BIND_FAILURE; }
 
@@ -85,29 +87,48 @@ bool freeOpenCLLib() noexcept { return FreeLibrary(DLLHandle); }
 
 // TODO: noexcept more things.
 
-// NOTE: Assumes that the input is clean.
-uint16_t convertStringToUInt16(const char* string, size_t length) {
-	uint16_t result = string[0] - '0';
-	for (int i = 1; i < length; i++) { result = result * 10 + (string[i] - '0'); }
+// NOTE: Returns nullptr on second on error.
+std::pair<uint16_t, const char *> convertStringToUInt16(const char *string_raw, size_t length) noexcept {
+	const unsigned char *string = (const unsigned char *)string_raw;		// cast to avoid signed overflow, which would be UB
+	uint32_t result = string[0] - '0';
+	for (int i = 1; i < length; i++) {
+		const unsigned char digit = string[i] - '0';
+		result = result * 10 + digit;
+		if (result > (uint16_t)-1) { return std::pair(-1, nullptr); }
+	}
+	return std::pair<result, >;
+}
+
+// TODO: Combine functions for efficiency and simplicity.
+
+// NOTE: Assumes that the input string is null-terminated.
+std::pair<uint16_t, const char *> convertStringToUInt16(const char* string_raw) noexcept {
+	const unsigned char *string = (const unsigned char *)string_raw;		// cast to avoid signed overflow, which would be UB
+	uint32_t result = string[0] - '0';
+	for (int i = 1; string[i] != '\0'; i++) {
+		const unsigned char digit = string[i] - '0';
+		result = result * 10 + digit;
+		if (result > (uint16_t)-1) { return std::pair(-1, nullptr); }
+	}
 	return result;
 }
 
-// NOTE: Assumes that the input is clean and there is at least one character of data to process and the string is null-terminated.
-uint16_t convertStringToUInt16(const char* string) {
-	uint16_t result = string[0] - '0';
-	for (int i = 1; ; i++) { if (string[i] == '\0') { return result; } result = result * 10 + (string[i] - '0'); }
-}
+VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* string) noexcept {
+	const unsigned char *string_ptr = (const unsigned char *)string;		// to avoid signed overflow
 
-// NOTE: Assumes the version string is always valid and has at least one number character for both the major and the minor versions. Also obviously assumes the string is null-terminated.
-VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* string) {
-	for (int i = CL_EXT_VERSION_STRING_PREFIX_LENGTH; ; i++) {
+	for (; *string_ptr != '\0'; string_ptr++) {
+		const unsigned char digit = *string_ptr - '0';
+		if (digit <= 9) {
+			uint32_t parsed_num = convertStringToUInt16((const char *)string_ptr);
+		}
+
 		// TODO: Make these functions way more resilient. This doesn't handle the space at the end of the version string correctly for example.
 		if (string[i] == '.') { return VersionIdentifier(convertStringToUInt16(string + CL_EXT_VERSION_STRING_PREFIX_LENGTH, i - CL_EXT_VERSION_STRING_PREFIX_LENGTH), convertStringToUInt16(string + i + 1)); }
 		if (string[i] == '\0') { return VersionIdentifier(-1, -1); }			// This shouldn't happen given the requirements above, but I feel better knowing it's here.
 	}
 }
 
-OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier& minimumPlatformVersion) {
+OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier& minimumPlatformVersion) noexcept {
 	cl_uint platformCount;
 	err = clGetPlatformIDs(0, nullptr, &platformCount);
 	if (err != CL_SUCCESS) { return OpenCLDeviceCollection(); }
@@ -259,7 +280,7 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 	*/
 }
 
-cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) {
+cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) noexcept {
 	/*cl_uint platformCount;
 	cl_int err = clGetPlatformIDs(0, nullptr, &platformCount);
 	if (err != CL_SUCCESS) { return err; }
@@ -411,7 +432,7 @@ cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatfor
 	return CL_SUCCESS;
 }
 
-char* readFromSourceFile(const char* sourceFile, cl_int& errorCode) {
+char* readFromSourceFile(const char* sourceFile, cl_int& errorCode) noexcept {
 	std::ifstream kernelSourceFile(sourceFile, std::ios::beg);
 	if (!kernelSourceFile.is_open()) { errorCode = CL_EXT_FILE_OPEN_FAILED; return nullptr; }
 #pragma push_macro(max)																																		// Count the characters inside the source file, construct large enough buffer, read from file into buffer.
@@ -429,7 +450,7 @@ char* readFromSourceFile(const char* sourceFile, cl_int& errorCode) {
 	return kernelSource;																																	// Returning a raw heap-initialized char array is potentially dangerous. The caller must delete the array.
 }
 
-cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, const char* sourceCodeString, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog) {
+cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, const char* sourceCodeString, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog) noexcept {
 	cl_int err;
 	program = clCreateProgramWithSource(context, 1, (const char* const*)&sourceCodeString, nullptr, &err);
 	if (!program) { return CL_EXT_CREATE_PROGRAM_FAILED; }
@@ -503,7 +524,7 @@ cl_int setupComputeKernelFromString(cl_context context, cl_device_id device, con
 	return CL_SUCCESS;
 }
 
-cl_int setupComputeKernelFromFile(cl_context context, cl_device_id device, const char* sourceCodeFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog) {
+cl_int setupComputeKernelFromFile(cl_context context, cl_device_id device, const char* sourceCodeFile, const char* kernelName, cl_program& program, cl_kernel& kernel, size_t& kernelWorkGroupSize, std::string& buildLog) noexcept {
 	cl_int err;
 	const char* sourceCodeString = readFromSourceFile(sourceCodeFile, err);
 	if (!sourceCodeString) { return err; }
