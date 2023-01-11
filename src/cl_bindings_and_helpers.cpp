@@ -13,8 +13,6 @@
 
 #include <limits>						// for std::numeric_limits
 
-#include <utility>						// For std::pair.
-
 HMODULE DLLHandle;
 
 bool loadOpenCLLib() noexcept { return DLLHandle = LoadLibraryA("OpenCL.dll"); }
@@ -85,47 +83,111 @@ cl_int initOpenCLBindings() noexcept {
 
 bool freeOpenCLLib() noexcept { return FreeLibrary(DLLHandle); }
 
-// TODO: noexcept more things.
-
-// NOTE: Returns nullptr on second on error.
-std::pair<uint16_t, const char *> convertStringToUInt16(const char *string_raw, size_t length) noexcept {
-	const unsigned char *string = (const unsigned char *)string_raw;		// cast to avoid signed overflow, which would be UB
-	uint32_t result = string[0] - '0';
-	for (int i = 1; i < length; i++) {
-		const unsigned char digit = string[i] - '0';
-		result = result * 10 + digit;
-		if (result > (uint16_t)-1) { return std::pair(-1, nullptr); }
+constexpr bool is_character_whitespace(char character) noexcept {
+	switch (character) {
+	case ' ': return true;
+	case '\t': return true;
+	default: return false;
 	}
-	return std::pair<result, >;
 }
 
-// TODO: Combine functions for efficiency and simplicity.
-
-// NOTE: Assumes that the input string is null-terminated.
-std::pair<uint16_t, const char *> convertStringToUInt16(const char* string_raw) noexcept {
-	const unsigned char *string = (const unsigned char *)string_raw;		// cast to avoid signed overflow, which would be UB
-	uint32_t result = string[0] - '0';
-	for (int i = 1; string[i] != '\0'; i++) {
-		const unsigned char digit = string[i] - '0';
-		result = result * 10 + digit;
-		if (result > (uint16_t)-1) { return std::pair(-1, nullptr); }
-	}
-	return result;
-}
-
+// NOTE: Does what the name implies, while trying to be able to parse as many different variations of the version string syntax,
+// for future-proofness.
 VersionIdentifier convertOpenCLVersionStringToVersionIdentifier(const char* string) noexcept {
-	const unsigned char *string_ptr = (const unsigned char *)string;		// to avoid signed overflow
+	// NOTE: In this function, we encode the parsing algorithm into the control flow. This is an acceptable approach,
+	// but technically a custom DFA simulator and table would be more efficient at this problem (because their translation to assembly
+	// results in faster instructions than the translation of the control flow version (and this isn't something that we can
+	// properly rely on the optimizer for either, at least as far as I can tell)). I'm not going to get into it in depth here,
+	// but it's got to do with the fact that the DFA heavily relies on memory caching, with minimal branch predictor overhead, where-as
+	// the control flow version heavily relies on caching as well, but has pretty substantial branch predictor overhead.
+	// This only makes a difference when nesting switch statements, which is nice, but as it happens, we are nesting them here.
+	// That's why my point about DFA's being better here stands.
+	// BUT: I'm keeping the control flow version, because it's easier to understand and expand upon, and this part of the code doesn't have to
+	// be as fast as possible anyway, although I'm still going to try to make it as fast as possible within the bounds of the control flow system.
 
+	const unsigned char *string_ptr = (const unsigned char *)string;		// TO AVOID SIGNED OVERFLOW!
+
+	uint32_t major;
+	uint32_t minor;
+
+skip_past_junk:
+	// Skip past all the junk that comes before the version number.
+	while (true) {
+		// NOTE: Can't be a uint8_t because unsigned char might be bigger than a byte and that would overflow, which would make digit <= 9 false-trigger.
+		const unsigned char digit = *string_ptr - '0';	// NOTE: This isn't UB, I assure you, it is defined and produces the correct behavior.
+		if (digit <= 9) { major = digit; string_ptr++; break; }
+		if (*string_ptr == '\0') { return { 0, 0 }; }
+		string_ptr++;
+		// TODO: Re-research about branches and which configurations have which overhead and how the branch predictor behaves specifically for x86.
+		// Once you've done that, provide reasoning for your choices in this function regarding if order and placement and such.
+		// I've already got a vague idea of what's efficient, so these orderings are probably pretty good, but I should re-research it as I said.
+	}
+
+	// Parse the major version number.
+	while (true) {
+		const unsigned char digit = *string_ptr - '0';
+		if (digit > 9) { break; }		// NOTE: This is on purpose, it isn't an error, even though the simplicity is suspect.
+		major = major * 10 + digit;
+		if (major > (uint16_t)-1) {
+			// NOTE: This section skips past digits until it reaches anything that's not a digit. Then it starts from junk skipping again.
+			string_ptr++;
+			while (true) {
+				// NOTE: I think consolidating the following into a switch statement might actually be less efficient because of branch prediction.
+				// If not, the compiler will probably optimize into a switch statement anyway, but I think it might actually stay like it is,
+				// because it seems more efficient. TODO: Take a look at the assembly and test your theory.
+				if (*string_ptr - '0' <= 9) { string_ptr++; continue; }
+				if (*string_ptr == '\0') { return { 0, 0 }; }
+				goto skip_past_junk;
+			}
+		}
+		string_ptr++;
+	}
+
+	// Wait for one dot to pass, all the while filtering out whitespace. If invalid character is encountered, go back to junk skipping.
+	while (true) {
+		if (*string_ptr != '.') {
+			if (!is_character_whitespace(*string_ptr)) {
+				if (*string_ptr == '\0') { return { 0, 0 }; }
+				goto skip_past_junk;			// NOTE: Not incrementing string_ptr on purpose here, very useful.
+			}
+			// NOTE: This case is the jumpless case because it's the most probable.
+			string_ptr++;
+			continue;
+		}
+		string_ptr++;
+		goto break_out_of_loop;
+	}
+break_out_of_loop:
+
+	// Wait for minor version number, only filtering out whitespace. If invalid character is encountered, go back to junk skipping.
+	while (true) {
+		const unsigned char digit = *string_ptr - '0';		// NOTE: Optimizer will very probably optimize this var out and work on minor directly.
+		if (digit > 9) {
+			if (!is_character_whitespace(*string_ptr)) {
+				if (*string_ptr == '\0') { return { 0, 0 }; }
+				goto skip_past_junk;
+			}
+			// NOTE: This case is the jumpless case because it's the most probable.
+			// TODO: Again, check through x86 jump optimization possibilites online.
+			string_ptr++;
+			continue;
+		}
+		minor = digit;
+		string_ptr++;
+		break;
+	}
+
+	// Parse the minor version number. If anything but a number gets in the way, we're done.
 	for (; *string_ptr != '\0'; string_ptr++) {
 		const unsigned char digit = *string_ptr - '0';
-		if (digit <= 9) {
-			uint32_t parsed_num = convertStringToUInt16((const char *)string_ptr);
-		}
-
-		// TODO: Make these functions way more resilient. This doesn't handle the space at the end of the version string correctly for example.
-		if (string[i] == '.') { return VersionIdentifier(convertStringToUInt16(string + CL_EXT_VERSION_STRING_PREFIX_LENGTH, i - CL_EXT_VERSION_STRING_PREFIX_LENGTH), convertStringToUInt16(string + i + 1)); }
-		if (string[i] == '\0') { return VersionIdentifier(-1, -1); }			// This shouldn't happen given the requirements above, but I feel better knowing it's here.
+		if (digit > 9) { return { major, minor }; }
+		minor = minor * 10 + digit;
+		if (minor > (uint16_t)-1) { return { 0, 0 }; }
+		continue;
 	}
+
+	// End of string, return result.
+	return { major, minor };
 }
 
 OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier& minimumPlatformVersion) noexcept {

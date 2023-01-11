@@ -659,6 +659,8 @@ struct VersionIdentifier {
 	uint16_t major;
 	uint16_t minor;
 
+	constexpr VersionIdentifier() noexcept = default;
+
 	constexpr VersionIdentifier(uint16_t major, uint16_t minor) noexcept : major(major), minor(minor) { }
 
 	constexpr bool operator>=(const VersionIdentifier& rightSide) const noexcept {
