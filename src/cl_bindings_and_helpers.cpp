@@ -13,6 +13,8 @@
 
 #include <limits>						// for std::numeric_limits
 
+#include <vector>
+
 HMODULE DLLHandle;
 
 bool loadOpenCLLib() noexcept { return DLLHandle = LoadLibraryA("OpenCL.dll"); }
@@ -200,7 +202,7 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 	cl_uint platformCount;
 	err = clGetPlatformIDs(0, nullptr, &platformCount);
 	if (err != CL_SUCCESS) { return OpenCLDeviceCollection(); }
-	if (platformCount == 0) { err = CL_EXT_NO_PLATFORMS_FOUND; return OpenCLDeviceCollection(); }
+	if (!platformCount) { return OpenCLDeviceCollection(); }
 
 	cl_platform_id* platforms = new (std::nothrow) cl_platform_id[platformCount];
 	if (!platforms) {
@@ -213,23 +215,22 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 		return OpenCLDeviceCollection();
 	}
 
-	// TODO: Fix visual studio formatting so that it doesn't put asterisk on the type and lets me align it to the var name.
-	for (const cl_platform_id *ptr = platforms; ptr < platforms + platformCount; ptr++) {
-
-	}
-
-	custom_vector<cl_context> contexts(err);
-	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
-
-	custom_vector<size_t> context_end_indices(err);
-	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
-
-	custom_vector<cl_device_id> devices(err);
-	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
+	// NOTE: I don't know if these heap allocations are worse than avoiding vectors by sorting through platform versions once for counting
+	// and then once again for filling (see the way you've been doing it for compile-time algorithms for more clarity).
+	// The second option would make the code more complex, which isn't worth the potential performance boost because this code doesn't need to be fast
+	// at all.
+	// We could also make a custom vector that stack allocates for small amounts and then switches to heap for bigger amounts,
+	// but that complexity also isn't worth it.
+	// IN CONCLUSION: I'm keeping it like this because the code complexity is the simplest.
+	// NOTE: If you're wondering why we don't use vectors for everything in this function, see below.
+	std::vector<cl_uint> validPlatforms;
+	std::vector<cl_uint> validPlatformDeviceCounts;
+	size_t totalDeviceCount = 0;
 
 	for (size_t i = 0; i < platformCount; i++) {
-		const cl_platform_id& currentPlatform = platforms[i];										// NOTE: You might think you can just as well leave out the reference, but I think it is probably better with the reference since there are ways a copy can be avoided and we don't want to hinder that.
-																									// NOTE: Although on second thought, this technique doesn't really do anything in this case since the compiler can easily optimize it even if we just use a copy.
+		const cl_platform_id& currentPlatform = platforms[i];	// NOTE: You might think you can just as well leave out the reference, but I think it is probably better with the reference since there are ways a copy can be avoided (stays in same register the whole time for example) and we don't want to hinder that.
+																// NOTE: Although on second thought, this technique doesn't really do anything in this case since the compiler can easily optimize it even if we just use a copy.
+																// NOTE: But it's still good practice because it expresses your thoughts more clearly and I guess is better for some optimizations, so we're doing it.
 		size_t versionStringSize;
 		err = clGetPlatformInfo(currentPlatform, CL_PLATFORM_VERSION, 0, nullptr, &versionStringSize);
 		if (err != CL_SUCCESS) {
@@ -254,6 +255,8 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 		delete[] versionString;
 
 		if (platform_version >= minimumPlatformVersion) {
+			validPlatforms.push_back(i);
+
 			cl_uint deviceCount;
 			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_ALL, 0, nullptr, &deviceCount);
 			switch (err) {
@@ -281,51 +284,25 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 				return OpenCLDeviceCollection();
 			}
 
-			const size_t before_length = devices.length;
+			validPlatformDeviceCounts.push_back(deviceCount);
+			totalDeviceCount += deviceCount;
 
-			err = devices.push_empty_back(deviceCount);
-			if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
-
-			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_ALL, deviceCount, devices.data + before_length, nullptr);
-			if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }						// NOTE: This really shouldn't ever throw an error, see above comments.
-
-			cl_context new_context = clCreateContext(nullptr, deviceCount, devices.data + before_length, nullptr, nullptr, &err);
-			if (!new_context) { delete[] platforms; return OpenCLDeviceCollection(); }		// TODO: Handle err codes.
-
-			err = contexts.push_back(new_context);
-			if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
-
-			err = context_end_indices.push_back(devices.length);
-			if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
-
-			// TODO: Accidentally reimplemented the thing above, remove all the stuff above and basically revert everything.
+			continue;
 		}
 	}
-
-	OpenCLDeviceCollection result;
-	result.devices_length = devices.length;
-	result.contexts_length = contexts.length;
-	result.devices = devices.steal_data(err);
-	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
-	result.contexts = contexts.steal_data(err);
-	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
-	result.contextEndIndices = context_end_indices.steal_data(err);
-	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
-	return result;
-
 
 	/*
 	* 
 	* NOTE: We go through everything, get the counts, then construct the OpenCLDeviceCollection, go through everything again
 	* and get the data. The reason we do this is because std::vector isn't able to lose control of it's data.
 	* We could create our own std::vector (would be easy in this case since we barely use any of the functionality) and add
-	* the functionality that we want, but this is easier. This solution is possibly minimally worse (can't definitively tell
-	* until you benchmark it though), but this function is only run once so it's totally not a problem.
-	* TODO: Maybe as a future improvement, consider trying it with a custom vector.
+	* the functionality that we want, but this is easier and simpler. Honestly, not using vectors for most of the stuff might even be
+	* faster because we avoid heap allocations, but I don't know.
+	* The important thing is that this version makes the code less complex (because no vector implementation), which is worth the possible performance loss
+	* because this code isn't performance critical at all.
 	* 
 	*/
 
-	/*
 	size_t validPlatformsCount = validPlatforms.size();
 
 	OpenCLDeviceCollection result(err, validPlatformsCount, totalDeviceCount);
@@ -350,82 +327,11 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 	}
 
 	return result;
-	*/
+
+	// TODO: Fix visual studio formatting so that it doesn't put asterisk on the type and lets me align it to the var name in for loops and such.
 }
 
 cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) noexcept {
-	/*cl_uint platformCount;
-	cl_int err = clGetPlatformIDs(0, nullptr, &platformCount);
-	if (err != CL_SUCCESS) { return err; }
-	if (!platformCount) { return CL_EXT_NO_PLATFORMS_FOUND; }
-
-	cl_platform_id* platforms = new (std::nothrow) cl_platform_id[platformCount];
-	if (!platforms) { return CL_EXT_INSUFFICIENT_HOST_MEM; }
-	err = clGetPlatformIDs(platformCount, platforms, nullptr);
-	if (err != CL_SUCCESS) { delete[] platforms; return err; }
-
-	size_t bestDeviceMaxWorkGroupSize = 0;
-	for (int i = 0; i < platformCount; i++) {
-		const cl_platform_id& currentPlatform = platforms[i];										// NOTE: You might think you can just as well leave out the reference, but I think it is probably better with the reference since there are ways a copy can be avoided (stays in register the whole time for example) and we don't want to hinder that.
-																									// NOTE: Although on second thought, this technique doesn't really do anything in this case since the compiler can easily optimize it even if we just use a copy. 
-		size_t versionStringSize;
-		err = clGetPlatformInfo(currentPlatform, CL_PLATFORM_VERSION, 0, nullptr, &versionStringSize);
-		if (err != CL_SUCCESS) { delete[] platforms; return err; }
-
-		char* versionString = new (std::nothrow) char[versionStringSize];
-		if (!versionString) { delete[] platforms; return CL_EXT_INSUFFICIENT_HOST_MEM; }
-		err = clGetPlatformInfo(currentPlatform, CL_PLATFORM_VERSION, versionStringSize, versionString, nullptr);
-		if (err != CL_SUCCESS) { delete[] versionString; delete[] platforms; return err; }
-
-		if (convertOpenCLVersionStringToVersionIdentifier(versionString) >= minimumTargetPlatformVersion) {
-			delete[] versionString;
-
-			cl_uint deviceCount;
-			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_GPU, 0, nullptr, &deviceCount);				// TODO: Change this algorithm to work with any device that isn't the CPU, so also signal processors or whatever other accel thing you have connected to your computer.
-			if (err != CL_SUCCESS) { delete[] platforms; return err; }
-			if (!deviceCount) { delete[] platforms; return CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM; }
-
-			cl_device_id* devices = new (std::nothrow) cl_device_id[deviceCount];
-			if (!devices) { delete[] platforms; return CL_EXT_INSUFFICIENT_HOST_MEM; }
-			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_GPU, deviceCount, devices, nullptr);
-			if (err != CL_SUCCESS) { delete[] platforms; return err; }
-
-			for (int j = 0; j < deviceCount; j++) {
-				cl_device_id& currentDevice = devices[i];
-
-				size_t deviceMaxWorkGroupSize;																												// Get the theoretical maximum work group size of the current device. This value is how we measure which device has the most computational power, thereby qualifying as the best.
-				err = clGetDeviceInfo(currentDevice, CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(size_t), &deviceMaxWorkGroupSize, nullptr);
-				if (err != CL_SUCCESS) { delete[] platforms; return err; }
-
-				if (deviceMaxWorkGroupSize > bestDeviceMaxWorkGroupSize) {
-					bestDeviceMaxWorkGroupSize = deviceMaxWorkGroupSize;
-					bestDevice = currentDevice;
-					bestPlatform = currentPlatform;
-				}
-			}
-			continue;
-		}
-		delete[] versionString;
-	}
-	delete[] platforms;
-	if (!bestDeviceMaxWorkGroupSize) { return CL_EXT_NO_DEVICES_FOUND; }																					// NOTE: This error theoretically never ever gets thrown here, but I'm keeping it in just in case something crazy happens.
-
-	// Establish other needed vars using the best device on the system.
-
-	context = clCreateContext(nullptr, 1, &bestDevice, nullptr, nullptr, &err);
-	if (err != CL_SUCCESS) { return err; }
-
-	commandQueue = clCreateCommandQueue(context, bestDevice, 0, &err);
-	if (err != CL_SUCCESS) {
-		clReleaseContext(context);																															// Errors aren't handled here because it doesn't make a difference if it fails or not.
-		return err;
-	}
-
-	return CL_SUCCESS;*/
-
-
-
-
 	cl_int err;
 
 	OpenCLDeviceCollection devices = getAllOpenCLDevices(err, minimumTargetPlatformVersion);
@@ -503,6 +409,77 @@ cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumTargetPlatfor
 	if (err != CL_SUCCESS) { return err; }
 
 	return CL_SUCCESS;
+
+	// NOTE: The rest of this function is just an old implementation that I'm keeping around for reference.
+
+	/*cl_uint platformCount;
+	cl_int err = clGetPlatformIDs(0, nullptr, &platformCount);
+	if (err != CL_SUCCESS) { return err; }
+	if (!platformCount) { return CL_EXT_NO_PLATFORMS_FOUND; }
+
+	cl_platform_id* platforms = new (std::nothrow) cl_platform_id[platformCount];
+	if (!platforms) { return CL_EXT_INSUFFICIENT_HOST_MEM; }
+	err = clGetPlatformIDs(platformCount, platforms, nullptr);
+	if (err != CL_SUCCESS) { delete[] platforms; return err; }
+
+	size_t bestDeviceMaxWorkGroupSize = 0;
+	for (int i = 0; i < platformCount; i++) {
+		const cl_platform_id& currentPlatform = platforms[i];										// NOTE: You might think you can just as well leave out the reference, but I think it is probably better with the reference since there are ways a copy can be avoided (stays in register the whole time for example) and we don't want to hinder that.
+																									// NOTE: Although on second thought, this technique doesn't really do anything in this case since the compiler can easily optimize it even if we just use a copy. 
+		size_t versionStringSize;
+		err = clGetPlatformInfo(currentPlatform, CL_PLATFORM_VERSION, 0, nullptr, &versionStringSize);
+		if (err != CL_SUCCESS) { delete[] platforms; return err; }
+
+		char* versionString = new (std::nothrow) char[versionStringSize];
+		if (!versionString) { delete[] platforms; return CL_EXT_INSUFFICIENT_HOST_MEM; }
+		err = clGetPlatformInfo(currentPlatform, CL_PLATFORM_VERSION, versionStringSize, versionString, nullptr);
+		if (err != CL_SUCCESS) { delete[] versionString; delete[] platforms; return err; }
+
+		if (convertOpenCLVersionStringToVersionIdentifier(versionString) >= minimumTargetPlatformVersion) {
+			delete[] versionString;
+
+			cl_uint deviceCount;
+			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_GPU, 0, nullptr, &deviceCount);				// TODO: Change this algorithm to work with any device that isn't the CPU, so also signal processors or whatever other accel thing you have connected to your computer.
+			if (err != CL_SUCCESS) { delete[] platforms; return err; }
+			if (!deviceCount) { delete[] platforms; return CL_EXT_NO_DEVICES_FOUND_ON_PLATFORM; }
+
+			cl_device_id* devices = new (std::nothrow) cl_device_id[deviceCount];
+			if (!devices) { delete[] platforms; return CL_EXT_INSUFFICIENT_HOST_MEM; }
+			err = clGetDeviceIDs(currentPlatform, CL_DEVICE_TYPE_GPU, deviceCount, devices, nullptr);
+			if (err != CL_SUCCESS) { delete[] platforms; return err; }
+
+			for (int j = 0; j < deviceCount; j++) {
+				cl_device_id& currentDevice = devices[i];
+
+				size_t deviceMaxWorkGroupSize;																												// Get the theoretical maximum work group size of the current device. This value is how we measure which device has the most computational power, thereby qualifying as the best.
+				err = clGetDeviceInfo(currentDevice, CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(size_t), &deviceMaxWorkGroupSize, nullptr);
+				if (err != CL_SUCCESS) { delete[] platforms; return err; }
+
+				if (deviceMaxWorkGroupSize > bestDeviceMaxWorkGroupSize) {
+					bestDeviceMaxWorkGroupSize = deviceMaxWorkGroupSize;
+					bestDevice = currentDevice;
+					bestPlatform = currentPlatform;
+				}
+			}
+			continue;
+		}
+		delete[] versionString;
+	}
+	delete[] platforms;
+	if (!bestDeviceMaxWorkGroupSize) { return CL_EXT_NO_DEVICES_FOUND; }																					// NOTE: This error theoretically never ever gets thrown here, but I'm keeping it in just in case something crazy happens.
+
+	// Establish other needed vars using the best device on the system.
+
+	context = clCreateContext(nullptr, 1, &bestDevice, nullptr, nullptr, &err);
+	if (err != CL_SUCCESS) { return err; }
+
+	commandQueue = clCreateCommandQueue(context, bestDevice, 0, &err);
+	if (err != CL_SUCCESS) {
+		clReleaseContext(context);																															// Errors aren't handled here because it doesn't make a difference if it fails or not.
+		return err;
+	}
+
+	return CL_SUCCESS;*/
 }
 
 char* readFromSourceFile(const char* sourceFile, cl_int& errorCode) noexcept {
