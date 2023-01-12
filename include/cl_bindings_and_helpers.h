@@ -803,8 +803,6 @@ public:
 	}
 };
 
-// TODO: You should probably remove this if you end up not using it in the implementation file. Put it somewhere
-// else for safe-keeping.
 template <typename element_t>
 class custom_vector {
 public:
@@ -868,7 +866,8 @@ public:
 		if (new_length <= capacity) { length = new_length; return CL_SUCCESS; }
 
 		size_t difference = new_length - capacity;
-		size_t aligned_difference = 128 - (difference - 1) % 128 - 1 + difference;			// TODO: Replace other, weirder aligning code somewhere in the codebase with this version, this one looks nice.
+		size_t aligned_difference = 128 - ((difference - 1) % 128 + 1) + difference;
+		// TODO: Replace other, weirder aligning code somewhere in the codebase with this version, this one looks nice.
 
 		cl_int err = increase_space(aligned_difference);
 		if (err != CL_SUCCESS) { return err; }
@@ -963,7 +962,8 @@ public:
 	OpenCLDeviceIndexCollection& operator=(const OpenCLDeviceIndexCollection& right) = delete;
 	// NOTE: Automatically also can't move-assign if copy assignment operator is deleted (unless specified otherwise), which is nice.
 	// NOTE: This also deletes the copy constructor, which is good because we don't want that.
-	// TODO: Figure out the deprecation thing from stackoverflow again!!!!!!!
+	// NOTE: At least it will, once the opposite behavior goes from being deprecated to being outlawed in the spec.
+	// See StackOverflow question about the topic.
 
 	constexpr void swap(OpenCLDeviceIndexCollection& other) noexcept {
 		const OpenCLDeviceCollection* temp_data = data;
