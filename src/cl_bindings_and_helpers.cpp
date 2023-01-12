@@ -213,6 +213,11 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 		return OpenCLDeviceCollection();
 	}
 
+	// TODO: Fix visual studio formatting so that it doesn't put asterisk on the type and lets me align it to the var name.
+	for (const cl_platform_id *ptr = platforms; ptr < platforms + platformCount; ptr++) {
+
+	}
+
 	custom_vector<cl_context> contexts(err);
 	if (err != CL_SUCCESS) { delete[] platforms; return OpenCLDeviceCollection(); }
 
