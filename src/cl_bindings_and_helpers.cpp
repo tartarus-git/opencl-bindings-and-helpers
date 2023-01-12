@@ -117,6 +117,12 @@ skip_past_junk:
 		const unsigned char digit = *string_ptr - '0';	// NOTE: This isn't UB, I assure you, it is defined and produces the correct behavior.
 		if (digit <= 9) { major = digit; string_ptr++; break; }
 		if (*string_ptr == '\0') { return { 0, 0 }; }
+		// QUESTION: Why narrowing conversions disallowed in aggregate initialization?
+		// ANSWER: Because implicit narrowing conversions should be disallowed everywhere, they are the cause of many bugs, or so I've heard.
+		// QUESTION: Then why are they allowed in most places?
+		// ANSWER: Because C++ is not a great language, only a good language. More concretely, because C did it like this and C++ decided they should stick with the program.
+		// IMPORTANT: Allowing implicit narrowing conversions is nothing but a terrible idea though, that much is clear.
+		// NOTE: You should always explicitly narrowly convert instead of implicitly, to signal the intent to the reader thuroughly.
 		string_ptr++;
 		// TODO: Re-research about branches and which configurations have which overhead and how the branch predictor behaves specifically for x86.
 		// Once you've done that, provide reasoning for your choices in this function regarding if order and placement and such.
@@ -180,14 +186,14 @@ break_out_of_loop:
 	// Parse the minor version number. If anything but a number gets in the way, we're done.
 	for (; *string_ptr != '\0'; string_ptr++) {
 		const unsigned char digit = *string_ptr - '0';
-		if (digit > 9) { return { major, minor }; }
+		if (digit > 9) { return { (uint16_t)major, (uint16_t)minor }; }
 		minor = minor * 10 + digit;
 		if (minor > (uint16_t)-1) { return { 0, 0 }; }
 		continue;
 	}
 
 	// End of string, return result.
-	return { major, minor };
+	return { (uint16_t)major, (uint16_t)minor };
 }
 
 OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier& minimumPlatformVersion) noexcept {
