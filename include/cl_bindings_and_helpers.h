@@ -632,7 +632,7 @@ inline clEnqueueReadImage_func clEnqueueReadImage;
 
 // TODO: Think about noexcepting these function ptrs.
 // You can't really because you can't cast non-noexcept to noexcept function ptrs.
-// TODO: Find a way around that.
+// TODO: Find a way around that for efficiency.
 
 typedef cl_int (CL_API_CALL* clReleaseMemObject_func)(cl_mem memobj);
 // Decrements a memory object's reference count.
@@ -1110,7 +1110,6 @@ OpenCLDeviceCollection getAllOpenCLDevices(cl_int& err, const VersionIdentifier&
 // clCreateContext
 // clCreateCommandQueue
 // clReleaseContext
-// TODO: Update the name of minPlatVers in the implementation as well.
 cl_int initOpenCLVarsForBestDevice(const VersionIdentifier& minimumPlatformVersion, cl_platform_id& bestPlatform, cl_device_id& bestDevice, cl_context& context, cl_command_queue& commandQueue) noexcept;
 
 // Helper function to quickly set up a compute kernel.
