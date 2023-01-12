@@ -2,7 +2,7 @@
 Very simple library containing some bindings, defines and helper functions for writing programs that utilize OpenCL.
 
 # How To Include In Project
-Import the repo as a submodule into your repo. After that, you must add this repo's include folder to your include paths in whatever compiler you're using.
+Import the repo as a submodule into your repo (see SUBMODULE_CHEATSHEET.txt for some help). After that, you must add this repo's include folder to your include paths in whatever compiler you're using.
 
 # Platforms
 You can use whatever compiler you want as long as it compiles the code successfully (I'm not exactly sure what the minimum C++ version needs to be for the code to compile,
