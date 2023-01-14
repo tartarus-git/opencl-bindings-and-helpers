@@ -9,6 +9,8 @@
 
 #include <cstdlib>			// for malloc, realloc and free
 
+#include <utility>			// for std::pair
+
 // NOTE: These almost definitely only work in Windows, so if you ever want to port this to another system, these definitely need to change.
 #define CL_API_CALL _stdcall		// Calling covention for the OpenCL API calls.
 #define CL_CALLBACK _stdcall		// Calling convention for the OpenCL callback functions.
@@ -653,6 +655,34 @@ inline clReleaseCommandQueue_func clReleaseCommandQueue;
 typedef cl_int (CL_API_CALL* clReleaseContext_func)(cl_context context);
 // Decrements a context's reference count.
 inline clReleaseContext_func clReleaseContext;
+
+template <typename uint_t>
+constexpr uint_t integer_sqrt(uint_t input) {			// TODO: Is this the most efficient algorithm. Has to be good since it could run at runtime as well.
+	static_assert(std::is_unsigned<uint_t>{}, "integer_sqrt failed: input must be of unsigned integral type");
+	uint_t spanStartIndex = 0;
+	uint_t spanLengthMinusOne = input;
+	while (true) {
+		spanLengthMinusOne /= 2;
+		if (spanLengthMinusOne == 0) { return spanStartIndex; }
+		uint_t half = spanStartIndex + spanLengthMinusOne;
+		uint_t squareHalf = half * half;
+		if (squareHalf > input) { spanLengthMinusOne--; continue; }
+		if (squareHalf < input) { spanStartIndex = half; continue; }
+		return half;
+	}
+}
+
+template <typename uint_t>
+constexpr std::pair<uint_t, uint_t> calcSmallestBoundingBox(uint_t area) {
+	static_assert(std::is_unsigned<uint_t>{}, "calcSmallestBoundingBox failed: area must be of unsigned integral type");
+	uint_t cielRoot = integer_sqrt(area);
+	for (uint_t i = cielRoot; i >= 2; i--) {
+		if (area % i == 0) {
+			return std::make_pair(i, area / i);
+		}
+	}
+	return std::make_pair(1, area);
+}
 
 // Stores version information in numerical form.
 struct VersionIdentifier {
